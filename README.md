@@ -1,2 +1,2 @@
 # Lantern
-Stack based programming language in C
+Stack based programming language in C++
