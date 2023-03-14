@@ -1,11 +1,9 @@
-50 50 + 100 == if
-    100 print
-close
-
-30 10 - 20 == if
-    20 print
-close
-
-45 30 + 80 != if
-    321 print
+20 20 * 400 == if
+    10 10 * 100 != if
+        321 print
+    else
+        20 10 * 200 == if
+            456 print
+else 
+    123 print
 close
