@@ -1,1 +1,11 @@
-215125 34 + print
+50 50 + 100 == if
+    100 print
+close
+
+30 10 - 20 == if
+    20 print
+close
+
+45 30 + 80 != if
+    321 print
+close
