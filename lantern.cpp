@@ -56,7 +56,6 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
     }
 
     file.close();
-    
     return words;
 }
 
@@ -217,9 +216,11 @@ void InterpreteProgram(const std::string& filepath) {
                 Token tok = Token(TokenType::OperationResult);
                 tok.SetData<int32_t>((a.RawData<int32_t>() != b.RawData<int32_t>()));
                 stack.push_back(tok);
+
             }
         }
         if(token.Type == TokenType::Prev) {
+            assert(stack.size() != 0 && "Tried to get previous value of stack with empty stack.");
             Token prev = stack.back();
             stack.push_back(prev);
         }
@@ -237,6 +238,7 @@ void InterpreteProgram(const std::string& filepath) {
             else
                 res.SetData<int32_t>(b.RawData<int32_t>() < a.RawData<int32_t>());
             stack.push_back(res);
+
         }
         if(token.Type == TokenType::If) {
             Token val = stack.back();
@@ -247,7 +249,7 @@ void InterpreteProgram(const std::string& filepath) {
             }
         }
         if(token.Type == TokenType::EndWhile) {
-            i = token.RawData<int32_t>();
+            i = token.RawData<int32_t>() - 1;
         }
         if(token.Type == TokenType::RunWhile) {
             Token val = stack.back();
@@ -260,7 +262,7 @@ void InterpreteProgram(const std::string& filepath) {
             }
         }
         if(token.Type == TokenType::Else) {
-            i = token.RawData<int32_t>();
+            i = token.RawData<int32_t>() - 1;
         }
         if(token.Type == TokenType::Print) {
             if(!stack.empty()) {

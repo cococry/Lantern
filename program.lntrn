@@ -1,7 +1,12 @@
+1 if
+    321 print
+0 else
+    123 print
+endi
+
+321 print
 0
-while prev 100000 < run
-    prev print 
-    1 +
+while prev 10 < run
+    prev print
+    1 + 
 endw
-
-
