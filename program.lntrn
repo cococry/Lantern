@@ -1,9 +1,7 @@
-20 20 * 400 == if
-    10 10 * 100 != if
-        321 print
-    else
-        20 10 * 200 == if
-            456 print
-else 
-    123 print
-close
+0
+while prev 100000 < run
+    prev print 
+    1 +
+endw
+
+

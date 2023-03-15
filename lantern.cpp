@@ -2,6 +2,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <memory>
 #include <assert.h>
 
 enum class TokenType {
@@ -13,30 +14,32 @@ enum class TokenType {
     NotEqual,
     If,
     Else,
+    While,
+    RunWhile,
+    EndWhile,
+    GreaterThan,
+    LessThan,
+    Prev,
     PushToStack,
     OperationResult,
     Print,
 };
 
 struct Token {
-    Token(TokenType type, void* data = nullptr) 
+    Token(TokenType type, const std::shared_ptr<void>& data = nullptr) 
         : Data(data), Type(type) {
     }
-
     template<typename T>
     void SetData(T value) {
-        Data = malloc(sizeof(T));
-        T* dataConv = (int*)Data;
-        dataConv[0] = value;
-        Data = dataConv;
+        Data = std::make_shared<T>(value);
     }
-
+    
     template<typename T>
     T RawData() {
-        return *(T*)Data;
+        return *std::static_pointer_cast<T>(Data);
     }
 
-    void* Data;
+    std::shared_ptr<void> Data;
     TokenType Type;
 };
 
@@ -84,6 +87,7 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
     const std::vector<std::string> tokenWords = GetTokenWordsFromFile(filepath);
 
     uint32_t if_statement_count = 0;
+    uint32_t while_loop_count = 0;
     for(auto& token : tokenWords) {
         if(IsStringNumber(token)) {
             int32_t data = atoi(token.c_str());
@@ -113,6 +117,33 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
         if(token == "!=") {
             program.push_back(Token(TokenType::NotEqual));
         }
+        if(token == ">") {
+            program.push_back(Token(TokenType::GreaterThan));
+        }
+        if(token == "<") {
+            program.push_back(Token(TokenType::LessThan));
+        }
+        if(token == "endw") {
+            Token tok = Token(TokenType::EndWhile);
+            int32_t whileTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "while", while_loop_count - 1);
+            assert(whileTokenIndex != -1 && "While-End-Token without run-while-token loop.");
+            tok.SetData<int32_t>(whileTokenIndex);
+            program.push_back(tok);
+        }
+        if(token == "run") {
+            Token tok = Token(TokenType::RunWhile);
+            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endw", while_loop_count - 1);
+            assert(endTokenIndex != -1 && "While loop without end token.");
+            tok.SetData<int32_t>(endTokenIndex + 1);
+            program.push_back(tok);
+        }
+        if(token == "while") {
+            program.push_back(Token(TokenType::While));
+            while_loop_count++;
+        }
+        if(token == "prev") { 
+            program.push_back(Token(TokenType::Prev));
+        }
         if(token == "if") {
             int32_t elseTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "else", if_statement_count);
             if(elseTokenIndex != -1) {
@@ -120,20 +151,20 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
                 tok.SetData<int32_t>(elseTokenIndex);
                 program.push_back(tok);
             } else {
-                int32_t closeTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "close", if_statement_count);
-                assert(closeTokenIndex != -1 && "If statement without close token.");
+                int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", if_statement_count);
+                assert(endTokenIndex != -1 && "If statement without end token.");
                 Token tok = Token(TokenType::If);
-                tok.SetData<int32_t>(closeTokenIndex);
+                tok.SetData<int32_t>(endTokenIndex);
                 program.push_back(tok);
                 if_statement_count++;
             }
         }
         if(token == "else") {  
-            int32_t closeTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "close", if_statement_count);
-            assert(closeTokenIndex != -1 && "Else statement without close token or if statement.");
+            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", if_statement_count);
+            assert(endTokenIndex != -1 && "Else statement without end token or if statement.");
 
             Token tok = Token(TokenType::Else);
-            tok.SetData<int32_t>(closeTokenIndex);
+            tok.SetData<int32_t>(endTokenIndex);
             program.push_back(tok);
         }
 
@@ -188,11 +219,43 @@ void InterpreteProgram(const std::string& filepath) {
                 stack.push_back(tok);
             }
         }
+        if(token.Type == TokenType::Prev) {
+            Token prev = stack.back();
+            stack.push_back(prev);
+        }
+        if(token.Type == TokenType::GreaterThan ||
+                token.Type == TokenType::LessThan) {
+            Token a = stack.back();
+            stack.pop_back();
+            Token b = stack.back();
+            stack.pop_back();
+
+            Token res = Token(TokenType::OperationResult);
+            if(token.Type == TokenType::GreaterThan) {
+                res.SetData<int32_t>(b.RawData<int32_t>() > a.RawData<int32_t>());
+            }
+            else
+                res.SetData<int32_t>(b.RawData<int32_t>() < a.RawData<int32_t>());
+            stack.push_back(res);
+        }
         if(token.Type == TokenType::If) {
             Token val = stack.back();
             stack.pop_back();
             
             if(!val.RawData<int32_t>()) {
+                i = token.RawData<int32_t>();
+            }
+        }
+        if(token.Type == TokenType::EndWhile) {
+            i = token.RawData<int32_t>();
+        }
+        if(token.Type == TokenType::RunWhile) {
+            Token val = stack.back();
+            stack.pop_back();
+
+            if(!val.RawData<int32_t>()) {
+                if(token.RawData<int32_t>() > program.size()) 
+                    break;
                 i = token.RawData<int32_t>();
             }
         }
@@ -206,9 +269,6 @@ void InterpreteProgram(const std::string& filepath) {
                 std::cout << data << "\n";
             }
         } 
-    }
-    for(auto& token : program) {
-        free(token.Data);
     }
 }
 
