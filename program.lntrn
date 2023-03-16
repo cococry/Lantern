@@ -1,12 +1,19 @@
-1 if
-    321 print
-0 else
-    123 print
+"Hello There" print
+
+"Croco" "dile" + "Crocodile" == if
+    "Croco plus dile equals Crocodile" print
 endi
 
+"One" "Two" + "Three" != if
+    "'One' plus 'Two' does not equal 'Three'" print
+endi
+
+"A few numbers: " print
+123 print
+69 print
+420 print
 321 print
-0
-while prev 10 < run
-    prev print
-    1 + 
-endw
+100 print
+
+"Bye Sailor!" print
+
