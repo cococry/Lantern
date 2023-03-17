@@ -1,19 +1,14 @@
-"Hello There" print
+"Hello, There!" print
+
+"This is a quick demo of Lantern!" print
 
 "Croco" "dile" + "Crocodile" == if
-    "Croco plus dile equals Crocodile" print
+    "'Croco' plus 'dile' equals 'Crocodile'" print
 endi
 
-"One" "Two" + "Three" != if
-    "'One' plus 'Two' does not equal 'Three'" print
-endi
-
-"A few numbers: " print
-123 print
-69 print
-420 print
-321 print
-100 print
-
-"Bye Sailor!" print
-
+"A little counter: " print
+10
+while prev 0 > run
+    prev print
+    1 -
+endw

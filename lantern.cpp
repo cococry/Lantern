@@ -14,6 +14,7 @@ enum class TokenType {
     Equals,
     NotEqual,
     If,
+    EndIf,
     Else,
     While,
     RunWhile,
@@ -83,10 +84,15 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
         std::stringstream lineSS(line);
         std::string word;
         uint32_t strLiteralCount = 0;
+        bool addingLiteral = false;
         while(lineSS >> word) {
             if(word.front() == '"' && word.size() > 1) {
-                words.push_back(stringLiterals[strLiteralCount++]);
-            } else if(!(word.find('"') < word.size())) {
+                words.push_back(stringLiterals[strLiteralCount++]);         
+                addingLiteral = true;
+            } else if(word.find('"') < word.size() && addingLiteral) {
+                addingLiteral = false;
+            }
+            if(!(word.find('"') < word.size()) && !addingLiteral) {
                 words.push_back(word);
             }
         }
@@ -171,6 +177,9 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
         if(token == "<") {
             program.push_back(Token(TokenType::LessThan));
         }
+        if(token == "endi") {
+            program.push_back(Token(TokenType::EndIf));
+        }
         if(token == "endw") {
             Token tok = Token(TokenType::EndWhile);
             int32_t whileTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "while", while_loop_count - 1);
@@ -225,7 +234,7 @@ void InterpreteProgram(const std::string& filepath) {
     std::vector<Token> stack = {};
     for(uint32_t i = 0; i < program.size(); i++) {
         auto& token = program[i];
-        if(token.Type == TokenType::PushToStack) {
+        if(token.Type == TokenType::PushToStack) { 
                 stack.push_back(token);
         }
         if(token.Type == TokenType::Plus || token.Type == TokenType::Minus
@@ -291,7 +300,6 @@ void InterpreteProgram(const std::string& filepath) {
                 } 
         }
         if(token.Type == TokenType::Prev) {
-            assert(stack.size() != 0 && "Tried to get previous value of stack with empty stack.");
             Token prev = stack.back();
             stack.push_back(prev);
         }
@@ -315,7 +323,6 @@ void InterpreteProgram(const std::string& filepath) {
         if(token.Type == TokenType::If) {
             Token val = stack.back();
             stack.pop_back();
-            
             if(!val.RawData<int32_t>()) {
                 i = token.RawData<int32_t>();
             }
@@ -348,7 +355,7 @@ void InterpreteProgram(const std::string& filepath) {
                     std::cout << data << "\n";
                 }
             }
-        } 
+        }
     }
 }
 
