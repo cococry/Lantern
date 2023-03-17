@@ -1,14 +1,5 @@
-"Hello, There!" print
-
-"This is a quick demo of Lantern!" print
-
-"Croco" "dile" + "Crocodile" == if
-    "'Croco' plus 'dile' equals 'Crocodile'" print
-endi
-
-"A little counter: " print
-10
-while prev 0 > run
-    prev print
-    1 -
+0
+while 0 prev 10000 < run
+    0 prev print
+    1 +
 endw

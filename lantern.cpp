@@ -53,6 +53,11 @@ struct Token {
     TokenRuntimeType RuntimeType;
 };
 
+bool IsStringLiteral(const std::string& str) {
+    return str.front() == '"' && str.back() == '"';
+}
+
+
 const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath) {
     std::string line;
     std::vector<std::string> words;
@@ -86,11 +91,16 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
         uint32_t strLiteralCount = 0;
         bool addingLiteral = false;
         while(lineSS >> word) {
-            if(word.front() == '"' && word.size() > 1) {
-                words.push_back(stringLiterals[strLiteralCount++]);         
-                addingLiteral = true;
-            } else if(word.find('"') < word.size() && addingLiteral) {
-                addingLiteral = false;
+            if(IsStringLiteral(word)) {
+                words.push_back(word);
+                strLiteralCount++;
+            } else {
+                if(word.front() == '"' && word.size() > 1) {
+                    words.push_back(stringLiterals[strLiteralCount++]);         
+                    addingLiteral = true;
+                } else if(word.find('"') < word.size() && addingLiteral) {
+                    addingLiteral = false;
+                }
             }
             if(!(word.find('"') < word.size()) && !addingLiteral) {
                 words.push_back(word);
@@ -100,10 +110,6 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
 
     file.close();
     return words;
-}
-
-bool IsStringLiteral(const std::string& str) {
-    return str.front() == '"' && str.back() == '"';
 }
 bool IsStringNumber(const std::string& str) {
     std::string::const_iterator it = str.begin();
@@ -270,6 +276,7 @@ void InterpreteProgram(const std::string& filepath) {
                     }
                     Token tok = Token(TokenType::OperationResult);
                     tok.SetData<std::string>(result);
+                    std::cout << result << "\n";
                     stack.push_back(tok);
                 }
             }
@@ -300,7 +307,9 @@ void InterpreteProgram(const std::string& filepath) {
                 } 
         }
         if(token.Type == TokenType::Prev) {
-            Token prev = stack.back();
+            Token index = stack.back();
+            stack.pop_back();
+            Token prev = stack[stack.size() - index.RawData<int32_t>() - 1];
             stack.push_back(prev);
         }
         if(token.Type == TokenType::GreaterThan ||
@@ -345,12 +354,13 @@ void InterpreteProgram(const std::string& filepath) {
         }
         if(token.Type == TokenType::Print) {
             if(!stack.empty()) {
-                if(token.RuntimeType == TokenRuntimeType::Int) {
-                    int32_t data = stack.back().RawData<int32_t>();
+                Token tok = stack.back();
+                if(tok.RuntimeType == TokenRuntimeType::Int) {
+                    int32_t data = tok.RawData<int32_t>();
                     stack.pop_back();
                     std::cout << data << "\n";
                 } else {
-                    std::string data = stack.back().RawData<std::string>();
+                    std::string data = tok.RawData<std::string>();
                     stack.pop_back();
                     std::cout << data << "\n";
                 }
