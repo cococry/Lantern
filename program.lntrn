@@ -1,5 +1,0 @@
-0
-while 0 prev 10000 < run
-    0 prev print
-    1 +
-endw

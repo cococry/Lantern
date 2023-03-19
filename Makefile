@@ -1,4 +1,4 @@
 build:
-	g++ lantern.cpp -o lantern
+	g++ lantern.cpp -o bin/lantern -std=c++17
 run_test:
-	./lantern program.lntrn
+	./bin/lantern program.lntrn

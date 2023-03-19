@@ -1,0 +1,11 @@
+"=========================================" print
+"Testing String & Int operations in Latern" print
+"=========================================" print
+
+15 12 + print
+30 15 - print
+10 10 * print
+49 7  / print
+
+"Hello " "World" + print
+"Hello " "There " + "my name is Cococry!" + print

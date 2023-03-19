@@ -1,0 +1,19 @@
+"=========================================" print
+"Testing conditional statements in Lantern" print
+"=========================================" print
+
+0 if
+    "14" print
+endi
+
+1 if
+    "1 is twu" print
+else
+    "1 is false" print
+endi
+
+0 if
+    "1 is twu again" print
+else
+    "1 is false" print
+endi

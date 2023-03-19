@@ -1,0 +1,13 @@
+"==============================" print
+"Testing while loops in Lantern" print
+"==============================" print
+
+"A simple while loop that counts to 10 and Says Hello every time: " print
+
+0
+while 0 prev 10 < run
+    1 +
+    0 prev print
+    "Hello" print
+endw
+
