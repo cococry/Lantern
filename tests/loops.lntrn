@@ -1,17 +1,17 @@
-"==============================" print
-"Testing while loops in Lantern" print
-"==============================" print
+"==============================" println
+"Testing while loops in Lantern" println
+"==============================" println
 
-"A simple while loop that counts to 10 and Says Hello every time: " print
+"A simple while loop that counts to 10 and Says Hello every time: " println
 
 0
 while 0 prev 10 < run
     1 +
-    0 prev print
     "Hello" print
+    0 prev println
 endw
 
-"=========================================" print
-"Test passed!" print
-"=========================================" print
+"=========================================" println
+"Test passed!" println
+"=========================================" println
 

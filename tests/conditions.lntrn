@@ -1,35 +1,35 @@
-"=========================================" print
-"Testing conditional statements in Lantern" print
-"=========================================" print
+"=========================================" println
+"Testing conditional statements in Lantern" println
+"=========================================" println
 
-"Simple if statement:" print
+"Simple if statement:" println
 
 10 10 * 100 == if
-    "10 * 10 = 100!" print
+    "10 * 10 = 100!" println
 endi
 
-"If else statement:" print
+"If else statement:" println
 20 10 + 31 == if
-    "20 + 10 = 31!" print
+    "20 + 10 = 31!" println
 else
-    "20 + 10 != 31!" print
+    "20 + 10 != 31!" println
 endi
 
-"Nested if statments: " print
+"Nested if statments: " println
 
 30 30 + 60 == if
-    "30 + 30 = 60!" print
+    "30 + 30 = 60!" println
     "He" "llo" + "Hello" == if
-        "'He' + 'llo' = 'Hello'!" print
+        "'He' + 'llo' = 'Hello'!" println
         10 12 > if
-            "10 is bigger than 12!" print
+            "10 is bigger than 12!" println
         else
-            "10 is smaller than 12!" print
+            "10 is smaller than 12!" println
         endi
     endi
 endi
 
-"=========================================" print
-"Test Passed!" print
-"=========================================" print
+"=========================================" println
+"Test Passed!" println
+"=========================================" println
 

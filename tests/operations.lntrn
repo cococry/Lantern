@@ -1,17 +1,17 @@
-"=========================================" print
-"Testing String & Int operations in Latern" print
-"=========================================" print
+"=========================================" println
+"Testing String & Int operations in Latern" println
+"=========================================" println
 
-15 12 + print
-30 15 - print
-10 10 * print
-49 7  / print
+15 12 + println
+30 15 - println
+10 10 * println
+49 7  / println
 
-"Hello " "World" + print
-"Hello " "There " + "my name is Cococry!" + print
+"Hello " "World" + println
+"Hello " "There " + "my name is Cococry!" + println
 
-"=========================================" print
-"Test passed!" print
-"=========================================" print
+"=========================================" println
+"Test passed!" println
+"=========================================" println
 
 
