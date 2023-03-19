@@ -11,3 +11,7 @@ while 0 prev 10 < run
     "Hello" print
 endw
 
+"=========================================" print
+"Test passed!" print
+"=========================================" print
+

@@ -9,3 +9,9 @@
 
 "Hello " "World" + print
 "Hello " "There " + "my name is Cococry!" + print
+
+"=========================================" print
+"Test passed!" print
+"=========================================" print
+
+

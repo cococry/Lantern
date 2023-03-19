@@ -143,9 +143,26 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
     std::vector<Token> program;
     const std::vector<std::string> tokenWords = GetTokenWordsFromFile(filepath);
 
-    uint32_t if_statement_count = 0;
-    uint32_t while_loop_count = 0;
-    uint32_t else_statement_count = 0;
+    std::vector<int> ifToElseMap;
+
+    for(uint32_t i = 0; i < tokenWords.size(); i++) {
+        std::string token = tokenWords[i];
+        if(token == "if") {
+            bool foundElse = false;
+            for(uint32_t j = i; j < tokenWords.size(); j++) {
+                if(tokenWords[j] == "else") {
+                    ifToElseMap.push_back(j);
+                    foundElse = true;
+                    break;
+                }
+            }
+            if(!foundElse) {
+                ifToElseMap.push_back(-1);
+            }
+        }
+    }
+    uint32_t ifStatementCount = 0;
+    uint32_t whileLoopCount = 0;
     for(auto token : tokenWords) {
         if(IsStringNumber(token)) {
             int32_t data = atoi(token.c_str());
@@ -195,57 +212,52 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
         }
         if(token == "endw") {
             Token tok = Token(TokenType::EndWhile);
-            int32_t whileTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "while", while_loop_count - 1);
+            int32_t whileTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "while", whileLoopCount - 1);
             assert(whileTokenIndex != -1 && "While-End-Token without run-while-token loop.");
             tok.SetData<int32_t>(whileTokenIndex);
             program.push_back(tok);
         }
         if(token == "run") {
             Token tok = Token(TokenType::RunWhile);
-            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endw", while_loop_count - 1);
+            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endw", whileLoopCount - 1);
             assert(endTokenIndex != -1 && "While loop without end token.");
             tok.SetData<int32_t>(endTokenIndex);
             program.push_back(tok);
         }
         if(token == "while") {
             program.push_back(Token(TokenType::While));
-            while_loop_count++;
+            whileLoopCount++;
         }
         if(token == "prev") { 
             program.push_back(Token(TokenType::Prev));
         }
         if(token == "if") {
-            int32_t elseTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "else", else_statement_count);
-            std::cout << "Else token index: " << elseTokenIndex << "\n";
-            std::cout << "Else count: " << else_statement_count << "\n";
+            int32_t elseTokenIndex = ifToElseMap[ifStatementCount];
             if(elseTokenIndex != -1) {
                 Token tok = Token(TokenType::If);
-                int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", if_statement_count);
+                int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount);
                 assert(endTokenIndex != -1 && "If statement without end token.");
-                int32_t elseIndexMinusOne = elseTokenIndex + 2;
-                std::vector<int32_t> indices = {endTokenIndex, elseIndexMinusOne};
+                std::vector<int32_t> indices = {endTokenIndex, elseTokenIndex};
                 tok.SetData<std::vector<int32_t>>(indices);
                 program.push_back(tok);
             } else {
                 Token tok = Token(TokenType::If);
-                int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", if_statement_count);
+                int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount);
                 assert(endTokenIndex != -1 && "If statement without end token.");
                 std::vector<int32_t> indices = {endTokenIndex};
                 tok.SetData<std::vector<int32_t>>(indices);
                 program.push_back(tok);
             }
-            if_statement_count++;
+            ifStatementCount++;
         }
         if(token == "else") {  
-            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", if_statement_count - 1);
+            int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount - 1);
             assert(endTokenIndex != -1 && "Else statement without end token or if statement.");
 
             Token tok = Token(TokenType::Else);
             tok.SetData<int32_t>(endTokenIndex);
             program.push_back(tok);
-            else_statement_count++;
         }
-
     }
     return program;
 }
@@ -359,12 +371,16 @@ void InterpreteProgram(const std::string& filepath) {
             Token val = stack.back();
             stack.pop_back();
             if(!val.RawData<int32_t>()) {
-                if(token.RawData<std::vector<int32_t>>().size() == 1) {
-                    i = token.RawData<std::vector<int32_t>>()[0];
-                } else if(token.RawData<std::vector<int32_t>>().size() == 2) {
-                    i = token.RawData<std::vector<int32_t>>()[1];
+                if(token.Type == TokenType::If) {
+                    if(token.RawData<std::vector<int32_t>>().size() == 1) {
+                        i = token.RawData<std::vector<int32_t>>()[0];
+                    } else if(token.RawData<std::vector<int32_t>>().size() == 2) {
+                        i = token.RawData<std::vector<int32_t>>()[1];
+                    }
+                } else {
+                    i = token.RawData<int32_t>();
                 }
-            } 
+            }   
         }
         if(token.Type == TokenType::Else) {
                 i = token.RawData<int32_t>();

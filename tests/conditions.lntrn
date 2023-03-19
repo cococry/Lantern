@@ -2,18 +2,34 @@
 "Testing conditional statements in Lantern" print
 "=========================================" print
 
-0 if
-    "14" print
+"Simple if statement:" print
+
+10 10 * 100 == if
+    "10 * 10 = 100!" print
 endi
 
-1 if
-    "1 is twu" print
+"If else statement:" print
+20 10 + 31 == if
+    "20 + 10 = 31!" print
 else
-    "1 is false" print
+    "20 + 10 != 31!" print
 endi
 
-0 if
-    "1 is twu again" print
-else
-    "1 is false" print
+"Nested if statments: " print
+
+30 30 + 60 == if
+    "30 + 30 = 60!" print
+    "He" "llo" + "Hello" == if
+        "'He' + 'llo' = 'Hello'!" print
+        10 12 > if
+            "10 is bigger than 12!" print
+        else
+            "10 is smaller than 12!" print
+        endi
+    endi
 endi
+
+"=========================================" print
+"Test Passed!" print
+"=========================================" print
+
