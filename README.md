@@ -14,8 +14,24 @@ non linear interpretation
 
 ## Usage
 
-To interprete a Lantern program run:
+## Linux
+
+Building Lantern
+```console
+make build
 ```
+To interprete a Lantern program run:
+```console
 ./lantern <filepath>
 ```
 
+## Windows
+
+Building Lantern
+```console
+build.bat
+```
+To interprete a Lantern program run:
+```console
+.\lantern.exe <filepath>
+```
