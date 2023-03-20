@@ -3,7 +3,6 @@
 "=========================================" println
 
 "Simple if statement:" println
-
 10 10 * 100 == if
     "10 * 10 = 100!" println
 endi

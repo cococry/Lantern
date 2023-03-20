@@ -5,6 +5,9 @@
 #include <memory>
 #include <sstream>
 #include <assert.h>
+#include <algorithm>
+ 
+const std::string WHITESPACE = " \n\r\t\f\v";
 
 enum class TokenType {
     Plus = 0,
@@ -89,35 +92,31 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
             if(foundStrLiteralBegin) {
                 strLiteral += c;
             }
-        }
+        }     
         std::stringstream lineSS(line);
         std::string word;
         uint32_t strLiteralCount = 0;
         bool addingLiteral = false;
+        uint32_t quotationCount = 0;
         while(lineSS >> word) {
-            if(word == "\"") {
+            if(IsStringLiteral(word) && word.size() > 1) {
                 addingLiteral = false;
+                words.push_back(word);
                 continue;
             }
-            if(IsStringLiteral(word)) {
-                words.push_back(word);
-                strLiteralCount++;
-                addingLiteral = false;
+            if((word.front() == '"' || word == "\"") && !addingLiteral) {
+                addingLiteral = true;
+                words.push_back(stringLiterals[strLiteralCount++]);
                 continue;
-            } else {
-                if(word.front() == '"' && word.size() > 1) {
-                    words.push_back(stringLiterals[strLiteralCount++]);         
-                    addingLiteral = true;
-                } else if(word.find('"') < word.size() && addingLiteral) {
-                    addingLiteral = false;
-                }
-            }
-            if(!(word.find('"') < word.size()) && !addingLiteral) {
+            } 
+            if(!addingLiteral) {
                 words.push_back(word);
+            }
+            if(word.back() == '"' || word == "\"") {
+                addingLiteral = false;
             }
         }
-    }
-
+    }   
     file.close();
     return words;
 }
@@ -416,15 +415,15 @@ void InterpreteProgram(const std::string& filepath) {
                 if(tok.RuntimeType == TokenRuntimeType::Int) {
                     int32_t data = tok.RawData<int32_t>();
                     if(token.Type == TokenType::PrintLine) 
-                        std::cout << data << "\n";
+                        std::cout << data << std::flush << "\n";
                     else
-                        std::cout << data;
+                        std::cout << data << std::flush;
                 } else if(tok.RuntimeType == TokenRuntimeType::String) {
                     std::string data = tok.RawData<std::string>();
                     if(token.Type == TokenType::PrintLine) 
-                        std::cout << data << "\n";
+                        std::cout << data << std::flush << "\n";
                     else
-                        std::cout << data;
+                        std::cout << data << std::flush;
                 }
             }
         }
