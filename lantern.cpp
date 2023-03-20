@@ -342,7 +342,7 @@ void InterpreteProgram(const std::string& filepath) {
         }
         if(token.Type == TokenType::Equals || 
                 token.Type == TokenType::NotEqual) {
-                PanicOnError(stack.size() >= 2, "Equality check with less than 2 values on stack.");
+                PanicOnError(stack.size() < 2, "Equality check with less than 2 values on stack.");
                 Token a = stack.back();
                 stack.pop_back();
                 Token b = stack.back();
@@ -379,7 +379,7 @@ void InterpreteProgram(const std::string& filepath) {
                 } 
         }
         if(token.Type == TokenType::Prev) {
-            PanicOnError(stack.size() >= 2, "Tried to retrieve previous value stack with empty stack.");
+            PanicOnError(stack.size() < 2, "Tried to retrieve previous value stack with empty stack.");
             Token index = stack.back();
             stack.pop_back();
 
