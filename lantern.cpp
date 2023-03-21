@@ -6,8 +6,32 @@
 #include <sstream>
 #include <assert.h>
 #include <algorithm>
- 
-const std::string WHITESPACE = " \n\r\t\f\v";
+#include <stdio.h>
+#include <tuple>
+
+#ifdef _WIN32                                                       
+#define lntrnDebugBreak() __debugbreak()                                 
+#elif defined __linux__                                             
+#define lntrnDebugBreak() __builtin_trap()
+#else
+#define lntrnDebugBreak()
+#endif  
+
+#define ExprToString(expr) #expr
+
+#define PanicOnError(err, err_type, token_pos, ...) {           \
+    if(err) {                                                   \
+        printf("Lantern: Error on line %i:%i: ",                 \
+                std::get<0>(token_pos), std::get<1>(token_pos));\
+        printf(__VA_ARGS__);                                    \
+        printf("\n");                                           \
+        printf("Error Type: %s | Error Code: %i\n",             \
+            ExprToString(err_type), (int)err_type);             \
+        lntrnDebugBreak();                                      \
+    }                                                           \
+}
+
+static std::string interpretingFilepath = "";
 
 enum class TokenType {
     Plus = 0,
@@ -39,6 +63,14 @@ enum class TokenRuntimeType {
     String,
     MaxTypes
 };
+enum class InterpretationError {
+    StackOverflow = 0,
+    StackUnderflow,
+    SyntaxError,
+    IllegalOperation,
+    IllegalInstruction
+};
+
 struct Token {
     Token(TokenType type, const std::shared_ptr<void>& data = nullptr) 
         : Data(data), Type(type) {
@@ -65,18 +97,6 @@ bool IsStringLiteral(const std::string& str) {
     return str.front() == '"' && str.back() == '"';
 }
 
-void PanicOnError(bool err, const std::string msg = "") {
-    if(err) {
-        if(msg != "") {
-            std::cout << "Lantern: Error: " << msg << "\n";
-        }
-#ifdef _WIN32 
-        __debugbreak();
-#elif defined __linux__
-        __builtin_trap();
-#endif
-    }
-}
 
 const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath) {
     std::string line;
@@ -110,7 +130,6 @@ const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath
         std::string word;
         uint32_t strLiteralCount = 0;
         bool addingLiteral = false;
-        uint32_t quotationCount = 0;
         while(lineSS >> word) {
             if(IsStringLiteral(word) && word.size() > 1) {
                 addingLiteral = false;
@@ -140,15 +159,40 @@ bool IsStringNumber(const std::string& str) {
     return !str.empty() && it == str.end();
 }
 
+std::tuple<int32_t, int32_t> GetTokenPositionInFile(uint32_t tokenIndex) {
+    std::ifstream file(interpretingFilepath);
+    std::string line;
+    uint32_t lineIndex = 0;
+    uint32_t currentTokenIndex = 0;
+    while(std::getline(file, line)) {
+        uint32_t wordIndex = 0;
+        lineIndex++;
+
+        std::string word;
+        std::stringstream lineSS(line);
+
+        while(lineSS >> word) {
+            wordIndex++;
+            
+            if(currentTokenIndex == tokenIndex) {
+                return std::tuple<int32_t, int32_t>(lineIndex, wordIndex);
+            }
+            currentTokenIndex++;
+        }
+    }
+    file.close();
+
+    return std::tuple<int32_t, int32_t>(-1, -1);
+}
 template<typename T>
-int32_t GetIndexOfNthOccurrenceOfElement(const std::vector<T>& vals, const T& search_val, uint32_t n) { 
+int32_t GetIndexOfNthOccurrenceOfElement(const std::vector<T>& vals, const T& searchVal, uint32_t n) { 
     uint32_t i = 0;
-    int32_t occurrence_count = 0;
+    int32_t occurrenceCount = 0;
     for(auto& val : vals) {
-        if(val == search_val && occurrence_count == n) {
+        if(val == searchVal && occurrenceCount == (int32_t)n) {
             return i;
-        } else if(val == search_val) {
-            occurrence_count++;
+        } else if(val == searchVal) {
+            occurrenceCount++;
         }
         i++;
     }
@@ -179,13 +223,15 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
     }
     uint32_t ifStatementCount = 0;
     uint32_t whileLoopCount = 0;
-    for(auto token : tokenWords) {
+    for(uint32_t i = 0; i < tokenWords.size(); i++) {
+        std::string token = tokenWords[i];
         if(IsStringNumber(token)) {
             int32_t data = atoi(token.c_str());
             Token tok = Token(TokenType::PushToStack);
             tok.SetData<int32_t>(data);
             tok.SetRuntimeType(TokenRuntimeType::Int);
             program.push_back(tok);
+            continue;
         }
         if(IsStringLiteral(token)) {
             Token tok = Token(TokenType::PushToStack);
@@ -194,98 +240,101 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
             tok.SetData<std::string>(token);
             tok.SetRuntimeType(TokenRuntimeType::String);
             program.push_back(tok);
+            continue;
         }
 
         if(token == "+") {
             program.push_back(Token(TokenType::Plus));
         }
-        if(token == "-") {
+        else if(token == "-") {
             program.push_back(Token(TokenType::Minus));
         }
-        if(token == "*") {
+        else if(token == "*") {
             program.push_back(Token(TokenType::Multiply));
         }
-        if(token == "/") {
+        else if(token == "/") {
             program.push_back(Token(TokenType::Divide));
         }
-        if(token == "print") {
+        else if(token == "print") {
             program.push_back(Token(TokenType::Print));
         }
-        if(token == "println") {
+        else if(token == "println") {
             program.push_back(Token(TokenType::PrintLine));
         }
-        if(token == "==") {
+        else if(token == "==") {
             program.push_back(Token(TokenType::Equals));
         }
-        if(token == "!=") {
+        else if(token == "!=") {
             program.push_back(Token(TokenType::NotEqual));
         }
-        if(token == ">") {
+        else if(token == ">") {
             program.push_back(Token(TokenType::GreaterThan));
         }
-        if(token == "!") {
+        else if(token == "!") {
             program.push_back(Token(TokenType::Not));
         }
-        if(token == "<") {
+        else if(token == "<") {
             program.push_back(Token(TokenType::LessThan));
         }
-        if(token == ">=") {
+        else if(token == ">=") {
             program.push_back(Token(TokenType::GreaterThanOrEqual));
         }
-        if(token == "<=") {
+        else if(token == "<=") {
             program.push_back(Token(TokenType::LessThanOrEqual));
 
         }
-        if(token == "endi") {
+        else if(token == "endi") {
             program.push_back(Token(TokenType::EndIf));
         }
-        if(token == "endw") {
+        else if(token == "endw") {
             Token tok = Token(TokenType::EndWhile);
             int32_t whileTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "while", whileLoopCount - 1);
-            PanicOnError(whileTokenIndex == -1, "While-End-Token without run-while-token loop.");
+            PanicOnError(whileTokenIndex == -1, InterpretationError::SyntaxError, GetTokenPositionInFile(i), "While-End-Token without run-while-token loop.");
             tok.SetData<int32_t>(whileTokenIndex);
             program.push_back(tok);
         }
-        if(token == "run") {
+        else if(token == "run") {
             Token tok = Token(TokenType::RunWhile);
             int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endw", whileLoopCount - 1);
-            PanicOnError(endTokenIndex == -1, "While loop without end token.");
+            PanicOnError(endTokenIndex == -1, InterpretationError::SyntaxError, GetTokenPositionInFile(i), "While loop without end token.");
             tok.SetData<int32_t>(endTokenIndex);
             program.push_back(tok);
         }
-        if(token == "while") {
+        else if(token == "while") {
             program.push_back(Token(TokenType::While));
             whileLoopCount++;
         }
-        if(token == "prev") { 
+        else if(token == "prev") { 
             program.push_back(Token(TokenType::Prev));
         }
-        if(token == "if") {
+        else if(token == "if") {
             int32_t elseTokenIndex = ifToElseMap[ifStatementCount];
             if(elseTokenIndex != -1) {
                 Token tok = Token(TokenType::If);
                 int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount);
-                PanicOnError(endTokenIndex == -1, "If statement without end token.");
+                PanicOnError(endTokenIndex == -1, InterpretationError::SyntaxError, GetTokenPositionInFile(i), "If statement without end token.");
                 std::vector<int32_t> indices = {endTokenIndex, elseTokenIndex};
                 tok.SetData<std::vector<int32_t>>(indices);
                 program.push_back(tok);
             } else {
                 Token tok = Token(TokenType::If);
                 int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount);
-                PanicOnError(endTokenIndex == -1, "If statement without end token.");
+                PanicOnError(endTokenIndex == -1, InterpretationError::SyntaxError, GetTokenPositionInFile(i), "If statement without end token.");
                 std::vector<int32_t> indices = {endTokenIndex};
                 tok.SetData<std::vector<int32_t>>(indices);
                 program.push_back(tok);
             }
             ifStatementCount++;
         }
-        if(token == "else") {  
+        else if(token == "else") {  
             int32_t endTokenIndex = GetIndexOfNthOccurrenceOfElement<std::string>(tokenWords, "endi", ifStatementCount - 1);
-            PanicOnError(endTokenIndex == -1, "Else statement without end token or if statement.");
+            PanicOnError(endTokenIndex == -1, InterpretationError::SyntaxError, GetTokenPositionInFile(i), "Else statement without end token or if statement.");
     
             Token tok = Token(TokenType::Else);
             tok.SetData<int32_t>(endTokenIndex);
             program.push_back(tok);
+        } else {
+            PanicOnError(true, InterpretationError::IllegalInstruction, GetTokenPositionInFile(i), "Invalid instruction: %s.", token.c_str());
         }
     }
     return program;
@@ -308,7 +357,7 @@ void InterpreteProgram(const std::string& filepath) {
                     stack.pop_back();
                     stack.pop_back();
 
-                    int32_t result;
+                    int32_t result = 0;
                     if(token.Type == TokenType::Plus)
                         result = a.RawData<int32_t>() + b.RawData<int32_t>();
                     else if(token.Type == TokenType::Minus)
@@ -325,7 +374,7 @@ void InterpreteProgram(const std::string& filepath) {
                     stack.pop_back();
                     stack.pop_back();
                     
-                    std::string result;
+                    std::string result = "";
                     if(token.Type == TokenType::Plus) {
                         result = b.RawData<std::string>() + a.RawData<std::string>();
                     }
@@ -334,15 +383,21 @@ void InterpreteProgram(const std::string& filepath) {
                     tok.RuntimeType = TokenRuntimeType::String;
                     stack.push_back(tok);
                 } else {
-                    PanicOnError(a.RuntimeType != b.RuntimeType, "Operation with different data types.");
+                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalInstruction,
+                        GetTokenPositionInFile(i),
+                        "Operation with different data types.");
                     PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
-                            "Operation with unknown data type.");
+                        InterpretationError::IllegalInstruction,
+                        GetTokenPositionInFile(i),
+                        "Operation with unknown data type.");
                 }
             }
         }
         if(token.Type == TokenType::Equals || 
                 token.Type == TokenType::NotEqual) {
-                PanicOnError(stack.size() < 2, "Equality check with less than 2 values on stack.");
+                PanicOnError(stack.size() < 2, InterpretationError::StackUnderflow,
+                        GetTokenPositionInFile(i),
+                        "Equality check with less than 2 values on stack.");
                 Token a = stack.back();
                 stack.pop_back();
                 Token b = stack.back();
@@ -356,8 +411,12 @@ void InterpreteProgram(const std::string& filepath) {
                         tok.SetData<int32_t>((a.RawData<std::string>() == b.RawData<std::string>()));
                         tok.RuntimeType = TokenRuntimeType::String; 
                     } else {
-                        PanicOnError(a.RuntimeType != b.RuntimeType, "Equality check with different data types.");
+                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation, 
+                            GetTokenPositionInFile(i),
+                            "Equality check with different data types.");
                         PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
+                            InterpretationError::IllegalOperation,
+                            GetTokenPositionInFile(i),
                             "Equality chek with unknown data type.");
                     }
                     stack.push_back(tok);
@@ -371,15 +430,21 @@ void InterpreteProgram(const std::string& filepath) {
                         tok.SetData<int32_t>((a.RawData<std::string>() != b.RawData<std::string>()));
                         tok.RuntimeType = TokenRuntimeType::String; 
                     } else {
-                        PanicOnError(a.RuntimeType != b.RuntimeType, "Equality check with different data types.");
+                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation,
+                            GetTokenPositionInFile(i),
+                            "Equality check with different data types.");
                         PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
+                            InterpretationError::IllegalOperation,
+                            GetTokenPositionInFile(i),
                             "Equality chek with unknown data type.");
                     }
                     stack.push_back(tok);
                 } 
         }
         if(token.Type == TokenType::Prev) {
-            PanicOnError(stack.size() < 2, "Tried to retrieve previous value stack with empty stack.");
+            PanicOnError(stack.size() < 2, InterpretationError::StackUnderflow, 
+                    GetTokenPositionInFile(i),
+                    "Tried to retrieve previous value stack with empty stack.");
             Token index = stack.back();
             stack.pop_back();
 
@@ -408,13 +473,19 @@ void InterpreteProgram(const std::string& filepath) {
                 res.RuntimeType = TokenRuntimeType::Int; 
                 stack.push_back(res);
             } else {
-                    PanicOnError(a.RuntimeType != b.RuntimeType, "Size operation with different data types.");
+                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation,
+                        GetTokenPositionInFile(i),
+                        "Size operation with different data types.");
                     PanicOnError(a.RuntimeType > TokenRuntimeType::Int || b.RuntimeType > TokenRuntimeType::Int, 
-                            "Size operation with non-integer data type.");
+                        InterpretationError::IllegalOperation,
+                        GetTokenPositionInFile(i),
+                        "Size operation with non-integer data type.");
             }
         }
         if(token.Type == TokenType::If || token.Type == TokenType::RunWhile) {
-            PanicOnError(stack.empty(), "If statement without condition.");
+            PanicOnError(stack.empty(), InterpretationError::StackUnderflow, 
+                    GetTokenPositionInFile(i),
+                    "If statement without condition.");
             Token val = stack.back();
             stack.pop_back();
             if(!val.RawData<int32_t>()) {
@@ -437,11 +508,15 @@ void InterpreteProgram(const std::string& filepath) {
         }
         if(token.Type == TokenType::Not) {
             PanicOnError(stack.empty() || stack[stack.size() - 1].RuntimeType != TokenRuntimeType::Int, 
-                    "Used ! token without value on stack.");
+                    InterpretationError::StackUnderflow,
+                    GetTokenPositionInFile(i),
+                    "Used ! token without valid value on stack.");
             stack[stack.size() - 1].SetData<int32_t>(!stack[stack.size() - 1].RawData<int32_t>());
         }
         if(token.Type == TokenType::Print || token.Type == TokenType::PrintLine) {
-            PanicOnError(stack.empty(), "Used print token without value on stack.");
+            PanicOnError(stack.empty(), InterpretationError::StackUnderflow,
+                    GetTokenPositionInFile(i),
+                    "Used print token without value on stack.");
             Token tok = stack.back();
             stack.pop_back();
             if(tok.RuntimeType == TokenRuntimeType::Int) {
@@ -473,6 +548,7 @@ int main(int argc, char** argv) {
         std::cout << "Usage: lantern <filepath>\n";
         return EXIT_FAILURE;
     }
+    interpretingFilepath = argv[1];
     InterpreteProgram(argv[1]);
 
     return EXIT_SUCCESS;
