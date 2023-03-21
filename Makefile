@@ -4,4 +4,4 @@ run_tests:
 	./bin/lantern tests/operations.lntrn
 	./bin/lantern tests/conditions.lntrn
 	./bin/lantern tests/loops.lntrn
-
+	./bin/lantern tests/memory.lntrn

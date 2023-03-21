@@ -19,6 +19,8 @@
 
 #define ExprToString(expr) #expr
 
+#define STACK_CAP 64
+
 #define PanicOnError(err, err_type, token_pos, ...) {           \
     if(err) {                                                   \
         printf("Lantern: Error on line %i:%i: ",                 \
@@ -55,7 +57,9 @@ enum class TokenType {
     PushToStack,
     OperationResult,
     Print,
-    PrintLine
+    PrintLine,
+    MemSet,
+    MemGet,
 };
 
 enum class TokenRuntimeType {
@@ -68,10 +72,13 @@ enum class InterpretationError {
     StackUnderflow,
     SyntaxError,
     IllegalOperation,
-    IllegalInstruction
+    IllegalInstruction,
+    InvalidDataType,
+    IllegalHeapAccess
 };
 
 struct Token {
+    Token() = default;
     Token(TokenType type, const std::shared_ptr<void>& data = nullptr) 
         : Data(data), Type(type) {
     }
@@ -281,7 +288,12 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
         }
         else if(token == "<=") {
             program.push_back(Token(TokenType::LessThanOrEqual));
-
+        }
+        else if(token == "mset") {
+            program.push_back(Token(TokenType::MemSet));
+        }
+        else if(token == "mget") {
+            program.push_back(Token(TokenType::MemGet));
         }
         else if(token == "endi") {
             program.push_back(Token(TokenType::EndIf));
@@ -342,9 +354,14 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
 
 void InterpreteProgram(const std::string& filepath) {
     std::vector<Token> program = GenerateProgramFromFile(filepath);
-    std::vector<Token> stack = {};
+    std::vector<Token> stack;
+    std::vector<Token> heap;
+    heap.reserve(8);
+    stack.reserve(STACK_CAP);
+
     for(uint32_t i = 0; i < program.size(); i++) {
         auto& token = program[i];
+        PanicOnError(stack.size() >= STACK_CAP, InterpretationError::StackOverflow, GetTokenPositionInFile(i), "Stack is overflowed.");
         if(token.Type == TokenType::PushToStack) { 
                 stack.push_back(token);
         }
@@ -383,11 +400,11 @@ void InterpreteProgram(const std::string& filepath) {
                     tok.RuntimeType = TokenRuntimeType::String;
                     stack.push_back(tok);
                 } else {
-                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalInstruction,
+                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::InvalidDataType,
                         GetTokenPositionInFile(i),
                         "Operation with different data types.");
                     PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
-                        InterpretationError::IllegalInstruction,
+                        InterpretationError::InvalidDataType,
                         GetTokenPositionInFile(i),
                         "Operation with unknown data type.");
                 }
@@ -411,11 +428,11 @@ void InterpreteProgram(const std::string& filepath) {
                         tok.SetData<int32_t>((a.RawData<std::string>() == b.RawData<std::string>()));
                         tok.RuntimeType = TokenRuntimeType::String; 
                     } else {
-                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation, 
+                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::InvalidDataType, 
                             GetTokenPositionInFile(i),
                             "Equality check with different data types.");
                         PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
-                            InterpretationError::IllegalOperation,
+                            InterpretationError::InvalidDataType,
                             GetTokenPositionInFile(i),
                             "Equality chek with unknown data type.");
                     }
@@ -430,11 +447,11 @@ void InterpreteProgram(const std::string& filepath) {
                         tok.SetData<int32_t>((a.RawData<std::string>() != b.RawData<std::string>()));
                         tok.RuntimeType = TokenRuntimeType::String; 
                     } else {
-                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation,
+                        PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::InvalidDataType,
                             GetTokenPositionInFile(i),
                             "Equality check with different data types.");
                         PanicOnError(a.RuntimeType > TokenRuntimeType::MaxTypes || b.RuntimeType > TokenRuntimeType::MaxTypes, 
-                            InterpretationError::IllegalOperation,
+                            InterpretationError::InvalidDataType,
                             GetTokenPositionInFile(i),
                             "Equality chek with unknown data type.");
                     }
@@ -473,11 +490,11 @@ void InterpreteProgram(const std::string& filepath) {
                 res.RuntimeType = TokenRuntimeType::Int; 
                 stack.push_back(res);
             } else {
-                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::IllegalOperation,
+                    PanicOnError(a.RuntimeType != b.RuntimeType, InterpretationError::InvalidDataType,
                         GetTokenPositionInFile(i),
                         "Size operation with different data types.");
                     PanicOnError(a.RuntimeType > TokenRuntimeType::Int || b.RuntimeType > TokenRuntimeType::Int, 
-                        InterpretationError::IllegalOperation,
+                        InterpretationError::InvalidDataType,
                         GetTokenPositionInFile(i),
                         "Size operation with non-integer data type.");
             }
@@ -508,10 +525,52 @@ void InterpreteProgram(const std::string& filepath) {
         }
         if(token.Type == TokenType::Not) {
             PanicOnError(stack.empty() || stack[stack.size() - 1].RuntimeType != TokenRuntimeType::Int, 
-                    InterpretationError::StackUnderflow,
-                    GetTokenPositionInFile(i),
-                    "Used ! token without valid value on stack.");
+                InterpretationError::StackUnderflow,
+                GetTokenPositionInFile(i),
+                "Used ! token without valid value on stack.");
             stack[stack.size() - 1].SetData<int32_t>(!stack[stack.size() - 1].RawData<int32_t>());
+        }
+        if(token.Type == TokenType::MemGet) {
+            PanicOnError(stack.empty(), InterpretationError::StackUnderflow,
+                GetTokenPositionInFile(i),
+                "Used mget without specified index.");
+            Token index = stack.back();
+            PanicOnError(index.RuntimeType != TokenRuntimeType::Int, InterpretationError::InvalidDataType,
+                GetTokenPositionInFile(i),
+                "Non-integer value specified as index for mget.");
+            PanicOnError(index.RawData<int32_t>() > (int32_t)heap.capacity(), InterpretationError::IllegalHeapAccess,
+                GetTokenPositionInFile(i),
+                "Specified index of mget is out of bounds of heap.");
+            stack.pop_back();
+            Token res = heap[index.RawData<int32_t>()];
+            res.Type = TokenType::OperationResult;
+            stack.push_back(res);
+        }
+        if(token.Type == TokenType::MemSet) {
+            PanicOnError(stack.size() < 2, InterpretationError::StackUnderflow,
+                    GetTokenPositionInFile(i),
+                "Too few values for mset (usage: [index] [val] mset");
+            Token index = stack[stack.size() - 2];
+            PanicOnError(index.RuntimeType != TokenRuntimeType::Int, InterpretationError::InvalidDataType,
+                GetTokenPositionInFile(i),
+                "Non-integer value specified as index for mset.");
+            PanicOnError(index.RawData<int32_t>() > (int32_t)heap.capacity(), InterpretationError::IllegalHeapAccess,
+                GetTokenPositionInFile(i),
+                "Specified index of mset is out of bounds of heap.");
+            Token val = stack[stack.size() - 1];
+            if(index.RawData<int32_t>() < (int32_t)heap.size()) {
+                PanicOnError(val.RuntimeType != heap[index.RawData<int32_t>()].RuntimeType,
+                    InterpretationError::InvalidDataType, 
+                    GetTokenPositionInFile(i),
+                    "Tried to set data type of heap value to different data type.");
+            }
+            stack.pop_back();
+            stack.pop_back();
+            if(heap.size() >= heap.capacity()) {
+                heap.resize(heap.size() * 2);
+            }
+            heap[index.RawData<int32_t>()] = val;
+            
         }
         if(token.Type == TokenType::Print || token.Type == TokenType::PrintLine) {
             PanicOnError(stack.empty(), InterpretationError::StackUnderflow,
