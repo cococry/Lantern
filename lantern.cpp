@@ -60,6 +60,12 @@ enum class TokenType {
     PrintLine,
     MemSet,
     MemGet,
+    InputGet,
+    InputGetInt,
+    PtrCreate,
+    PtrGet,
+    PtrSetIndex,
+    PtrSet
 };
 
 enum class TokenRuntimeType {
@@ -103,7 +109,6 @@ struct Token {
 bool IsStringLiteral(const std::string& str) {
     return str.front() == '"' && str.back() == '"';
 }
-
 
 const std::vector<std::string> GetTokenWordsFromFile(const std::string& filepath) {
     std::string line;
@@ -225,7 +230,7 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
             }
             if(!foundElse) {
                 ifToElseMap.push_back(-1);
-            }
+          }
         }
     }
     uint32_t ifStatementCount = 0;
@@ -297,6 +302,12 @@ const std::vector<Token> GenerateProgramFromFile(const std::string& filepath) {
         }
         else if(token == "endi") {
             program.push_back(Token(TokenType::EndIf));
+        }
+        else if(token == "inget") {
+            program.push_back(Token(TokenType::InputGet));
+        }
+        else if(token == "ingeti") {
+            program.push_back(Token(TokenType::InputGetInt));
         }
         else if(token == "endw") {
             Token tok = Token(TokenType::EndWhile);
@@ -590,6 +601,23 @@ void InterpreteProgram(const std::string& filepath) {
                     std::cout << data << std::flush << "\n";
                 else
                     std::cout << data << std::flush;
+            }
+        }
+        if(token.Type == TokenType::InputGet || token.Type == TokenType::InputGetInt) {
+            if(token.Type == TokenType::InputGet) {
+                std::string data;
+                std::cin >> data;      
+                Token tok = Token(TokenType::OperationResult);
+                tok.RuntimeType = TokenRuntimeType::String;
+                tok.SetData<std::string>(data);
+                stack.push_back(tok);
+            } else if(token.Type == TokenType::InputGetInt) {
+                int32_t data; 
+                std::cin >> data;      
+                Token tok = Token(TokenType::OperationResult);
+                tok.RuntimeType = TokenRuntimeType::String;
+                tok.SetData<int32_t>(data);
+                stack.push_back(tok);
             }
         }
     }

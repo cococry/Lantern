@@ -1,0 +1,19 @@
+void setup() {
+}
+
+float deltaTime = 0.0f;
+float lastTime = 0.0f;
+float time = 0.0f;
+
+void loop() {
+    float currentTime = millis() / 1000.0f;
+    deltaTime = currentTime - lastTime;
+    lastTime = currentTime;
+
+    time += deltaTime;
+
+    if(digitalRead(13) == 0) {
+        Serial.print("Time is ");
+        Serial.println(time);
+    }
+}
