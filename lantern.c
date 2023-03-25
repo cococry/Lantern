@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <assert.h>
 
 #define STACK_CAP 64
 #define PROGRAM_CAP 1024
@@ -22,6 +21,11 @@ typedef enum {
     INST_PLUS,
     INST_PRINT,
     INST_JUMP,
+    INST_EQ,
+    INST_GT,
+    INST_LT,
+    INST_GEQ,
+    INST_LEQ,
 } Instruction;
 
 typedef enum {
@@ -83,6 +87,46 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 state->stack[state->stack_size++] = state->stack[index];
                 break;
             }
+            case INST_EQ: {
+                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
+                int32_t a = state->stack[state->stack_size - 1];
+                int32_t b = state->stack[state->stack_size - 2];
+                state->stack_size -= 2;
+                state->stack[state->stack_size++] = (int32_t)(a == b);
+                break;
+            }
+            case INST_GT: {
+                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than check specified.");
+                int32_t a = state->stack[state->stack_size - 1];
+                int32_t b = state->stack[state->stack_size - 2];
+                state->stack_size -= 2;
+                state->stack[state->stack_size++] = (int32_t)(b > a);
+                break;
+            }
+            case INST_LT: {
+                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than check specified.");
+                int32_t a = state->stack[state->stack_size - 1];
+                int32_t b = state->stack[state->stack_size - 2];
+                state->stack_size -= 2;
+                state->stack[state->stack_size++] = (int32_t)(b < a);
+                break;
+            }
+            case INST_GEQ: {
+                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than-equal check specified.");
+                int32_t a = state->stack[state->stack_size - 1];
+                int32_t b = state->stack[state->stack_size - 2];
+                state->stack_size -= 2;
+                state->stack[state->stack_size++] = (int32_t)(b >= a);
+                break;
+            }
+            case INST_LEQ: {
+                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than-equal check specified.");
+                int32_t a = state->stack[state->stack_size - 1];
+                int32_t b = state->stack[state->stack_size - 2];
+                state->stack_size -= 2;
+                state->stack[state->stack_size++] = (int32_t)(b <= a);
+                break;
+            }
             default:
                 PANIC_ON_ERR(true, ERR_ILLEGAL_INSTRUCTION, "Illegal instruction specified.");
                 break;
@@ -92,12 +136,20 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
 }
 
 Token program[] = {
-    {.inst = INST_STACK_PUSH, .data = 0},
-    {.inst = INST_STACK_PUSH, .data = 1},
-    {.inst = INST_PLUS},
-    {.inst = INST_STACK_PREV, .data = 0},
+    {.inst = INST_STACK_PUSH, .data = 31},
+    {.inst = INST_STACK_PUSH, .data = 19},
+    {.inst = INST_GT},
     {.inst = INST_PRINT},
-    {.inst = INST_JUMP, .data = 1}
+
+    {.inst = INST_STACK_PUSH, .data = 19},
+    {.inst = INST_STACK_PUSH, .data = 21},
+    {.inst = INST_LT},
+    {.inst = INST_PRINT},
+    
+    {.inst = INST_STACK_PUSH, .data = 21},
+    {.inst = INST_STACK_PUSH, .data = 21},
+    {.inst = INST_EQ},
+    {.inst = INST_PRINT},
 };
 int main() {
     ProgramState program_state;
