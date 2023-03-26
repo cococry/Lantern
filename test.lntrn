@@ -1,0 +1,15 @@
+49 7 / 7 == if
+    20 print
+endi
+
+10 10 * 100 == if
+    10 9 > if
+        30 print
+    else
+        80 10 - 80 > if
+            400 print
+        endi
+        100 print
+    endi
+    321 print
+endi
