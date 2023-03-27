@@ -1,0 +1,1 @@
+gcc ..\lantern.c -o ..\bin\lantern.exe -Wall -Wextra -Werror -O3 -ffast-math

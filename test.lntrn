@@ -1,0 +1,7 @@
+10
+while 0 prev 0 >= run
+    0 prev print
+    1 -
+endw
+
+321 print
