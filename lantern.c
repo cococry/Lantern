@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <sys/types.h>
 
 #define STACK_CAP 64
 #define PROGRAM_CAP 1024
@@ -22,6 +23,7 @@ typedef enum {
     INST_EQ,INST_NEQ, 
     INST_GT,INST_LT,INST_GEQ,INST_LEQ,
     INST_IF,INST_ELSE,INST_ENDIF,
+    INST_WHILE, INST_RUN_WHILE, INST_END_WHILE,
     INST_PRINT,
     INST_JUMP,
 } Instruction;
@@ -42,7 +44,7 @@ typedef struct {
 
 typedef struct {
     int32_t stack[STACK_CAP];
-    uint32_t stack_size;
+    int32_t stack_size;
 
     uint32_t inst_ptr;
 } ProgramState;
@@ -60,7 +62,7 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size) {
         printf("Lantern: [Error]: Cannot read file '%s'.\n", filepath);
         return NULL;
     }
-    uint32_t words_in_file = 0;
+    uint32_t words_in_file = 1;
     char ch;
     bool on_word = false;
     while ((ch = fgetc(file_count_words)) != EOF) {
@@ -119,6 +121,12 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size) {
             program[i] = (Token){ .inst = INST_ENDIF };
         } else if(strcmp(word, "print") == 0) {
             program[i] = (Token){ .inst = INST_PRINT };
+        } else if(strcmp(word, "while") == 0) {
+            program[i] = (Token){ .inst = INST_WHILE };
+        } else if(strcmp(word, "run") == 0) {
+            program[i] = (Token){ .inst = INST_RUN_WHILE };
+        } else if(strcmp(word, "endw") == 0) {
+            program[i] = (Token){ .inst = INST_END_WHILE };
         } else if(strcmp(word, "jmp") == 0) {
             program[i] = (Token){ .inst = INST_JUMP };
         } else {
@@ -139,7 +147,26 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                     program[i].data = j;
                     break;
                 }
+            }     
+        }
+        if(program[i].inst == INST_END_WHILE) {
+            program[i].data = -1;
+            for(int32_t j = i - 1; j >= 0; j--) {
+                if(program[j].inst == INST_WHILE) {
+                    program[i].data = j;
+                    break;
+                }
             }
+            PANIC_ON_ERR(program[i].data == -1, ERR_SYNTAX_ERROR, "While-end token without while condition.");
+        }
+        if(program[i].inst == INST_RUN_WHILE) {
+            for(uint32_t j = i; j < program_size; j++) {
+                if(program[j].inst == INST_END_WHILE) {
+                    program[i].data = j;
+                    break;
+                }
+            }
+            PANIC_ON_ERR(program[i].data == -1, ERR_SYNTAX_ERROR, "While condtion without end token.");
         }
         if(program[i].inst == INST_IF) {
             program[i].data = -1;
@@ -161,120 +188,112 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
         }
     }
     while(state->inst_ptr < program_size) {
-        switch (program[state->inst_ptr].inst) {
-            case INST_STACK_PUSH: {
-                PANIC_ON_ERR(state->stack_size >= STACK_CAP, ERR_STACK_OVERFLOW, "Stack is overflowed");
-                state->stack[state->stack_size++] = program[state->inst_ptr].data;
-                break;
-            }
-            case INST_PLUS: 
-            case INST_MINUS:
-            case INST_DIV:
-            case INST_MUL: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values on stack for arithmetic operator.");
-                
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                if(program[state->inst_ptr].inst == INST_PLUS)
-                    state->stack[state->stack_size++] = b + a;
-                else if(program[state->inst_ptr].inst == INST_MINUS) 
-                    state->stack[state->stack_size++] = b - a;
-                else if(program[state->inst_ptr].inst == INST_MUL) 
-                    state->stack[state->stack_size++] = b * a;
-                else if(program[state->inst_ptr].inst == INST_DIV) 
-                    state->stack[state->stack_size++] = b / a;
-                break;
-            }
-            case INST_PRINT: {
-                PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for print function on stack.");
-
-                int32_t val = state->stack[state->stack_size - 1];
-                state->stack_size--;
-                printf("%i\n", val);
-                break;
-            }
-            case INST_JUMP: {
-                int32_t index = program[state->inst_ptr].data;
-                PANIC_ON_ERR(index >= (int32_t)program_size || index < 0, ERR_INVALID_JUMP, "Invalid index for jump specified.");
-
-                state->inst_ptr = index - 1;
-                break;
-            }
-            case INST_STACK_PREV: {
-                int32_t index = (state->stack_size - 1) - program[state->inst_ptr].data;
-                PANIC_ON_ERR(index >= (int32_t)state->stack_size || index < 0, ERR_INVALID_STACK_ACCESS, "Invalid index for retrieving value from stack");
-                state->stack[state->stack_size++] = state->stack[index];
-                break;
-            }
-            case INST_EQ: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a == b);
-                break;
-            }
-            case INST_NEQ: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a != b);
-                break;
-            }
-            case INST_GT: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a > b);
-                break;
-            }
-            case INST_LT: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a < b);
-                break;
-            }
-            case INST_GEQ: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than-equal check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a >= b);
-                break;
-            }
-            case INST_LEQ: {
-                PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than-equal check specified.");
-                int32_t a = state->stack[state->stack_size - 1];
-                int32_t b = state->stack[state->stack_size - 2];
-                state->stack_size -= 2;
-                state->stack[state->stack_size++] = (int32_t)(a <= b);
-                break;
-            }
-            case INST_IF: {
-                PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for if check specified.");
-                int32_t cond = state->stack[state->stack_size - 1];
-                if(!cond) {
-                    Token tok = program[state->inst_ptr];
-                    state->inst_ptr = tok.data; 
-                }
-                break;
-            }
-            case INST_ELSE: {
+        if(program[state->inst_ptr].inst == INST_RUN_WHILE) {
+            PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
+            int32_t cond = state->stack[state->stack_size - 1];
+            state->stack_size -= 1;
+            if(!cond) {
                 Token tok = program[state->inst_ptr];
-                state->inst_ptr = tok.data;
-                break;
+                state->inst_ptr = tok.data + 1;
+                if((uint32_t)tok.data == program_size)
+                    break;
             }
-            case INST_ENDIF: {
-                break;
-            }
-            default:
-                PANIC_ON_ERR(true, ERR_ILLEGAL_INSTRUCTION, "Illegal instruction specified.");
-                break;
+        }
+        if(program[state->inst_ptr].inst == INST_END_WHILE) {
+            Token tok = program[state->inst_ptr];
+            state->inst_ptr = tok.data;
+        }
+        if (program[state->inst_ptr].inst == INST_STACK_PUSH) {
+            PANIC_ON_ERR(state->stack_size >= STACK_CAP, ERR_STACK_OVERFLOW, "Stack is overflowed");
+            state->stack[state->stack_size++] = program[state->inst_ptr].data;
+        }
+        if(program[state->inst_ptr].inst == INST_PLUS || program[state->inst_ptr].inst == INST_MINUS ||
+            program[state->inst_ptr].inst == INST_DIV || program[state->inst_ptr].inst == INST_MUL) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW,
+                         "Too few values on stack for arithmetic operator.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            if (program[state->inst_ptr].inst == INST_PLUS)
+                state->stack[state->stack_size++] = b + a;
+            else if (program[state->inst_ptr].inst == INST_MINUS)
+                state->stack[state->stack_size++] = b - a;
+            else if (program[state->inst_ptr].inst == INST_MUL)
+                state->stack[state->stack_size++] = b * a;
+            else if (program[state->inst_ptr].inst == INST_DIV)
+                state->stack[state->stack_size++] = b / a;
+        }
+        if(program[state->inst_ptr].inst == INST_PRINT) {
+            PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for print function on stack.");
+            int32_t val = state->stack[state->stack_size - 1];
+            state->stack_size -= 1;
+            printf("%i\n", val);
+        }
+        if(program[state->inst_ptr].inst == INST_JUMP) {
+            int32_t index = program[state->inst_ptr].data;
+            PANIC_ON_ERR(index >= (int32_t)program_size || index < 0, ERR_INVALID_JUMP, "Invalid index for jump specified.");
+            state->inst_ptr = index - 1;
+        }
+        if(program[state->inst_ptr].inst == INST_STACK_PREV) {
+            state->stack_size--;
+            int32_t index = (state->stack_size - 1) - program[state->inst_ptr].data;
+            PANIC_ON_ERR(index >= (int32_t)state->stack_size || index < 0, ERR_INVALID_STACK_ACCESS, "Invalid index for retrieving value from stack");
+            state->stack[state->stack_size++] = state->stack[index];
+        }
+        if(program[state->inst_ptr].inst == INST_EQ) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(a == b);
+        }
+        if(program[state->inst_ptr].inst == INST_NEQ) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(a != b);
+        }
+        if(program[state->inst_ptr].inst == INST_GT) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(b > a);
+        }
+        if(program[state->inst_ptr].inst == INST_LT) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(b < a);
+        }
+        if(program[state->inst_ptr].inst == INST_GEQ) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than-equal check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(b >= a);
+        }
+        if(program[state->inst_ptr].inst == INST_LEQ) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than-equal check specified.");
+            int32_t a = state->stack[state->stack_size - 1];
+            int32_t b = state->stack[state->stack_size - 2];
+            state->stack_size -= 2;
+            state->stack[state->stack_size++] = (int32_t)(b <= a);
+        }
+        if(program[state->inst_ptr].inst == INST_IF) {
+            PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for if check specified.");
+            int32_t cond = state->stack[state->stack_size - 1];
+            state->stack_size -= 1;
+            if(!cond) {
+                Token tok = program[state->inst_ptr];
+                state->inst_ptr = tok.data; 
+            } 
+        }
+        if(program[state->inst_ptr].inst == INST_ELSE) {
+            Token tok = program[state->inst_ptr];
+            state->inst_ptr = tok.data;
         }
         state->inst_ptr++;
     }
