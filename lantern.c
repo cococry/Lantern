@@ -74,7 +74,7 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
         printf("Lantern: [Error]: Cannot read file '%s'.\n", filepath);
         return NULL;
     }
-    uint32_t words_in_file = 0;
+    uint32_t words_in_file = 1;
     char ch;
     bool on_word = false;
     while ((ch = fgetc(file)) != EOF) {
@@ -131,27 +131,27 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     bool on_literal_token = false;
     uint32_t literal_token_count = 0;
     while(fscanf(file, "%s", word) != EOF) {
-        if(!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1) {
-            on_literal_token = false;
+        if((!on_literal_token && word[0] == '"') || (!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1)) {
+            if(!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1) {
+                on_literal_token = false;
+            } else {
+                on_literal_token = true;
+            }
             char* literal_cpy = malloc(256);
             strcpy(literal_cpy, literals[literal_token_count]);
+            uint32_t len = strlen(literal_cpy);
+            for(uint32_t i = 0; i < len; i++) {
+                if(literal_cpy[i] == '"') {
+                    for(uint32_t j = i; j < len; j++) {
+                        literal_cpy[j] = literal_cpy[j+1];
+                    }
+                    len--;
+                    i--;
+                }
+            }
             state->heap[state->heap_size] = literal_cpy;
             program[i] = (Token){ .inst = INST_STACK_PUSH_HEAP_PTR, .data = state->heap_size};
             state->heap_size++;
-            printf("Literal at %i: %s\n", literal_token_count, literals[literal_token_count]);
-            literal_token_count++;
-            printf("hi\n");
-            i++;
-            continue;
-        }
-        if(!on_literal_token && word[0] == '"') {
-            on_literal_token = true;
-            char* literal_cpy = malloc(256);
-            strcpy(literal_cpy, literals[literal_token_count]);
-            state->heap[state->heap_size] = literal_cpy;
-            program[i] = (Token){ .inst = INST_STACK_PUSH_HEAP_PTR, .data = state->heap_size};
-            state->heap_size++;
-            printf("Literal at %i: %s\n", literal_token_count, literals[literal_token_count]); 
             literal_token_count++;
             i++;
             continue;
@@ -211,11 +211,8 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
         }
         i++;
     }
+    printf("WORD SIZE: %i\n", words_in_file);
     fclose(file); 
-
-    for(uint32_t i = 0; i < state->heap_size; i++) {
-        printf("Heap: %s\n", (char*)state->heap[i]);
-    }
 
     free(literals);
     return program;
@@ -274,7 +271,6 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
         }
     }
     while(state->inst_ptr < program_size) {
-        //printf("Instruction: %i\n", (int)program[state->inst_ptr].inst);
         if(program[state->inst_ptr].inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
             int32_t cond = state->stack[state->stack_size - 1];
@@ -320,7 +316,6 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 char* val = state->heap[program[state->inst_ptr - 1].data];
                 state->stack_size -= 1;
                 printf("%s\n", val);
-                heap_free(state, program[state->inst_ptr - 1].data);
             }
         }
         if(program[state->inst_ptr].inst == INST_JUMP) {
