@@ -7,6 +7,7 @@
 #include <sys/types.h>
 
 #define STACK_CAP 64
+#define STACKFRAME_CAP 256
 #define PROGRAM_CAP 1024
          
 #define PANIC_ON_ERR(cond, err_type, ...)  {                                            \
@@ -17,14 +18,6 @@
     }                                                                                   \
 }                                                                                       \
 
-/*
- * "Hello World" <- Pushed to the heap
- *               <- Pointer to it is stored on the stack
- *               -> [printstr] interprete the value on the stack as a pointer to memory and cast it to char*
- *  
- *
- * */
-
 typedef enum {
     INST_STACK_PUSH, INST_STACK_PREV, INST_STACK_PUSH_HEAP_PTR,
     INST_PLUS, INST_MINUS, INST_MUL, INST_DIV,
@@ -32,8 +25,9 @@ typedef enum {
     INST_GT,INST_LT,INST_GEQ,INST_LEQ,
     INST_IF,INST_ELSE,INST_ENDIF,
     INST_WHILE, INST_RUN_WHILE, INST_END_WHILE,
-    INST_PRINT,
+    INST_PRINT, INST_PRINTLN,
     INST_JUMP,
+    INST_ADD_VAR_TO_STACKFRAME, INST_VAR_ASSIGN, INST_VAR_USAGE
 } Instruction;
 
 typedef enum {
@@ -51,13 +45,21 @@ typedef struct {
 } Token;
 
 typedef struct {
+    size_t data;
+    bool heap_ptr;
+    uint32_t frame_index;
+} StackFrameValue;
+
+typedef struct {
     int32_t stack[STACK_CAP];
     int32_t stack_size;
-
-    uint32_t inst_ptr;
-
     void** heap;
     uint32_t heap_size;
+    StackFrameValue stackframe[STACKFRAME_CAP];
+    uint32_t stackframe_size;
+    uint32_t stackframe_index;
+    uint32_t inst_ptr;
+    uint32_t program_size;
 } ProgramState;
 
 bool is_str_int(const char* str) {
@@ -66,8 +68,47 @@ bool is_str_int(const char* str) {
     }
     return true;
 }
+bool is_str_var_name(const char* str) {
+    if(is_str_int(str)) {
+        return false;
+    }
+    if(isdigit(str[0])) {
+        return false;
+    }
+    for(uint32_t i = 0; i < strlen(str); i++) {
+        if(str[i] == '!' || str[i] == '@' || str[i] == '#' || str[i] == '$'
+            || str[i] == '%' || str[i] == '^' || str[i] == '&' || str[i] == '*'
+            || str[i] == '(' || str[i] == ')' || str[i] == '-' || str[i] == '{'
+            || str[i] == '}' || str[i] == '[' || str[i] == ']' || str[i] == ':'
+            || str[i] == ';' || str[i] == '"' || str[i] == '\'' || str[i] == '<'
+            || str[i] == '>' || str[i] == '.' || str[i] == '/' || str[i] == '?'
+            || str[i] == '~' || str[i] == '`') {
+            return false;
+        }
+    }
+    return true;
+}
+
+void clear_current_stackframe(ProgramState* state, Token* program, uint32_t program_size) {
+    uint32_t i;
+    uint32_t cleared_values = 0;
+    for(i = state->stackframe_size; i > 0; i--) {
+        if(state->stackframe[i].frame_index != state->stackframe_index) break;
+        state->stackframe[i].data = SIZE_MAX;
+        state->stackframe[i].heap_ptr = false; 
+        state->stackframe_size--;
+        cleared_values++;     
+    }
+    if(cleared_values != 0) {
+        for(uint32_t i = 0; i < program_size; i++) {
+            if(program[i].inst == INST_VAR_USAGE) {
+                program[i].data -= cleared_values;
+            }
+        }
+    }
+}
+
 Token* load_program_from_file(const char* filepath, uint32_t* program_size, ProgramState* state) {
-    (void)state;
     FILE* file;
     file = fopen(filepath, "r");
     if(!file) {
@@ -130,6 +171,8 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     uint32_t i = 0;
     bool on_literal_token = false;
     uint32_t literal_token_count = 0;
+    char variable_names[STACKFRAME_CAP][256];
+    uint32_t variable_count = 0;
     while(fscanf(file, "%s", word) != EOF) {
         if((!on_literal_token && word[0] == '"') || (!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1)) {
             if(!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1) {
@@ -170,6 +213,8 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
         }
         if(strcmp(word, "prev") == 0) {
             program[i] = (Token){ .inst = INST_STACK_PREV };
+        } else if(strcmp(word, "=") == 0) {
+            program[i] = (Token){ .inst = INST_VAR_ASSIGN };
         } else if(strcmp(word, "+") == 0) {
             program[i] = (Token){ .inst = INST_PLUS };
         } else if(strcmp(word, "-") == 0) {
@@ -204,14 +249,38 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
             program[i] = (Token){ .inst = INST_RUN_WHILE };
         } else if(strcmp(word, "endw") == 0) {
             program[i] = (Token){ .inst = INST_END_WHILE };
+        } else if(strcmp(word, "println") == 0) {
+            program[i] = (Token){ .inst = INST_PRINTLN };
         } else if(strcmp(word, "jmp") == 0) {
             program[i] = (Token){ .inst = INST_JUMP };
         } else {
+            if(is_str_var_name(word)) {
+                if(i >= 2) {
+                    if(program[i - 1].inst == INST_VAR_ASSIGN) {
+                        PANIC_ON_ERR(i < 2, ERR_SYNTAX_ERROR, "Assigning variable to nothing.");
+                        program[i] = (Token){ .inst = INST_ADD_VAR_TO_STACKFRAME};
+                        strcpy(variable_names[variable_count++], word);
+                        i++;
+                        continue;
+                    } 
+                }
+                int32_t stackframe_index = -1;
+                for(uint32_t i = 0; i < variable_count; i++) {
+                    if(strcmp(variable_names[i], word) == 0) {
+                        stackframe_index = i;
+                        break;
+                    }
+                }
+                PANIC_ON_ERR(stackframe_index == -1, ERR_SYNTAX_ERROR, "Undeclared identifier '%s'.", word);
+                program[i] = (Token){ .inst = INST_VAR_USAGE, .data = stackframe_index};
+                i++;
+                continue;
+            
+            }
             PANIC_ON_ERR(true, ERR_SYNTAX_ERROR, "Syntax Error: Invalid Token '%s'.", word);
         }
         i++;
     }
-    printf("WORD SIZE: %i\n", words_in_file);
     fclose(file); 
 
     free(literals);
@@ -271,6 +340,18 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
         }
     }
     while(state->inst_ptr < program_size) {
+        if(program[state->inst_ptr].inst == INST_VAR_USAGE) {
+            if(state->stackframe[program[state->inst_ptr].data].heap_ptr) {
+                program[state->inst_ptr].inst = INST_STACK_PUSH_HEAP_PTR;
+            } else {
+                program[state->inst_ptr].inst = INST_STACK_PUSH;
+            }
+            program[state->inst_ptr].data = state->stackframe[program[state->inst_ptr].data].data;
+        }
+        if(program[state->inst_ptr].inst == INST_ADD_VAR_TO_STACKFRAME) {
+            state->stackframe[state->stackframe_size++] = (StackFrameValue){ .data = program[state->inst_ptr - 2].data,
+                .heap_ptr = (program[state->inst_ptr - 2].inst == INST_STACK_PUSH_HEAP_PTR ? true : false), .frame_index = state->stackframe_index};   
+        }
         if(program[state->inst_ptr].inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
             int32_t cond = state->stack[state->stack_size - 1];
@@ -280,11 +361,16 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 state->inst_ptr = tok.data + 1;
                 if((uint32_t)tok.data == program_size)
                     break;
+            } 
+            else {
+                state->stackframe_index++;
             }
         }
         if(program[state->inst_ptr].inst == INST_END_WHILE) {
             Token tok = program[state->inst_ptr];
             state->inst_ptr = tok.data;
+            state->stackframe_index--;
+            clear_current_stackframe(state, program, program_size);
         }
         if (program[state->inst_ptr].inst == INST_STACK_PUSH || program[state->inst_ptr].inst == INST_STACK_PUSH_HEAP_PTR) {
             PANIC_ON_ERR(state->stack_size >= STACK_CAP, ERR_STACK_OVERFLOW, "Stack is overflowed");
@@ -306,16 +392,22 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             else if (program[state->inst_ptr].inst == INST_DIV)
                 state->stack[state->stack_size++] = b / a;
         }
-        if(program[state->inst_ptr].inst == INST_PRINT) {
+        if(program[state->inst_ptr].inst == INST_PRINT || program[state->inst_ptr].inst == INST_PRINTLN) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for print function on stack.");
             if(program[state->inst_ptr - 1].inst == INST_STACK_PUSH) {
                 int32_t val = state->stack[state->stack_size - 1];
                 state->stack_size -= 1;
-                printf("%i\n", val);
+                if(program[state->inst_ptr].inst == INST_PRINTLN)
+                    printf("%i\n", val);
+                else
+                    printf("%i", val);
             } else if(program[state->inst_ptr - 1].inst == INST_STACK_PUSH_HEAP_PTR) {
                 char* val = state->heap[program[state->inst_ptr - 1].data];
                 state->stack_size -= 1;
-                printf("%s\n", val);
+                if(program[state->inst_ptr].inst == INST_PRINTLN)
+                    printf("%s\n", val);
+                else
+                    printf("%s", val);
             }
         }
         if(program[state->inst_ptr].inst == INST_JUMP) {
@@ -378,7 +470,13 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             if(!cond) {
                 Token tok = program[state->inst_ptr];
                 state->inst_ptr = tok.data; 
-            } 
+            } else {
+                state->stackframe_index++;
+            }
+        }
+        if(program[state->inst_ptr].inst == INST_ENDIF) {
+            state->stackframe_index--;
+            clear_current_stackframe(state, program, program_size);
         }
         if(program[state->inst_ptr].inst == INST_ELSE) {
             Token tok = program[state->inst_ptr];
@@ -401,10 +499,12 @@ int main(int argc, char** argv) {
     ProgramState program_state;
     program_state.stack_size = 0;
     program_state.heap_size = 0;
+    program_state.stackframe_size = 0;
     program_state.inst_ptr = 0;
     program_state.heap = malloc(1024 /* TODO: Dynamic Heap */);
+    program_state.stackframe_index = 0;
     Token* program = load_program_from_file(argv[1], &program_size, &program_state);
-
+    program_state.program_size = program_size;
     exec_program(&program_state, program, program_size);
     free(program_state.heap);
     return 0;

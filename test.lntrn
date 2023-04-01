@@ -1,7 +1,9 @@
-"This is a long string" print
-"Those are operators: + - * /" print
-0
-while 0 prev 10 < run
-    1 +
-    "Hello, World" print
-endw
+"luca" = vorname
+14 = alter
+
+"Du heisst " print
+vorname println
+
+"Du bist " print
+alter print
+" jahre alt" println
