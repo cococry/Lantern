@@ -1,9 +1,8 @@
-"luca" = vorname
-14 = alter
+"Hello, World" = sentence
 
-"Du heisst " print
-vorname println
+sentence println
 
-"Du bist " print
-alter print
-" jahre alt" println
+10 10 * 100 == if
+    100 = num
+    num println
+endi
