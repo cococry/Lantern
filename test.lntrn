@@ -1,8 +1,15 @@
-"Hello, World" = sentence
-
-sentence println
-
-10 10 * 100 == if
-    100 = num
-    num println
+30 30 + 60 == if
+    "hello, world" = sentence
+    sentence println
 endi
+
+14 = age
+"cococry" = name
+
+"your age is " print
+age println
+"your name is " print
+name println
+
+"bye, world" = sentence
+sentence println
