@@ -1,15 +1,7 @@
-30 30 + 60 == if
-    "hello, world" = sentence
-    sentence println
-endi
+0 = counter
 
-14 = age
-"cococry" = name
+while counter 10 < run
+    counter 1 + = counter
+    counter println
+endw
 
-"your age is " print
-age println
-"your name is " print
-name println
-
-"bye, world" = sentence
-sentence println
