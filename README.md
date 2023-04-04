@@ -1,6 +1,12 @@
 # Lantern
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)
 
+<img src="https://github.com/cococry/Lantern/blob/main/branding/lantern_logo.png"
+     alt="Lantern Logo"
+     style="float: left; margin-right: 10px;" 
+     width=230px
+     />
+     
 **Lantern** is a [stack based](https://en.wikipedia.org/wiki/Stack-oriented_programming), [interpreted](https://en.wikipedia.org/wiki/Interpreter_(computing)) programming language written in **C**.
 The goal of the project is creating a fast, bloatless and powerful programming tool 
 that can be used for multiple purposes. 
