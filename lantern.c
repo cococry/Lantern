@@ -271,15 +271,12 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
                             if(strcmp(variable_names[j], word) == 0) {
                                 int32_t stackframe_index = -1;
                                 for(uint32_t k = 0; k < variable_count; k++) {
-                                    //printf("Variable: %s\n", variable_names[k]);
-                                    //printf("Word: %s\n", word);
                                     if(strcmp(variable_names[k], word) == 0) {
                                         stackframe_index = k;
                                         break;
                                     }
                                 }
                                 re_assigning = true;
-                                //printf("Stackframe index: %i\n", stackframe_index);
                                 program[i] = (Token){ .inst = INST_VAR_REASSIGN };
                                 program[i].val.data = stackframe_index;
                                 break;
@@ -301,7 +298,6 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
                         break;
                     }
                 }
-                //printf("Stackframe index for %s: %i\n", word, stackframe_index);
                 PANIC_ON_ERR(stackframe_index == -1, ERR_SYNTAX_ERROR, "Undeclared identifier '%s'.", word);
                 program[i] = (Token){ .inst = INST_VAR_USAGE };
                 program[i].val.data = stackframe_index;
@@ -398,7 +394,6 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 state->stackframe[i].heap_ptr = false; 
                 state->stackframe_size--;
             }
-            //printf("Hit END WHILE\n\n");
             state->stackframe_index--;
         }
         if(program[state->inst_ptr].inst == INST_VAR_USAGE) {
