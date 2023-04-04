@@ -59,26 +59,21 @@ build.bat
 
 ## Example Usage
 
+### A implentation of the [FizzBuzz problem](https://de.wikipedia.org/wiki/Fizz_buzz)
 ```bash
-"hello, world" = sentence
-sentence println
-0 = num
+0 = counter
 
-while num 30 < run
-  num 1 + = num
-  num println
-  
-  num 3 % 0 == if
-    "^ Divisible by 3" println
-  endi
+while counter 100 < run
+    counter 3 % 0 == counter 5 % 0 == and if
+        "fizzbuzz" println
+    fi counter 3 % 0 == elif
+        "fizz" println
+    fi counter 5 % 0 == elif
+        "buzz" println
+    endi
+    counter 1 + = counter
+    counter println
 endw
-
-num num * = num
-"num^2 = " print
-num println
-
-"bye, world" = sentence
-sentence println
 ```
 
 ## Inspiration
