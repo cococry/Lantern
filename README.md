@@ -1,1 +1,88 @@
 # Lantern
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
+**Lantern** is a [stack based](https://en.wikipedia.org/wiki/Stack-oriented_programming), [interpreted](https://en.wikipedia.org/wiki/Interpreter_(computing)) programming language written in **C**.
+The goal of the project is creating a fast, bloatless and powerful programming tool 
+that can be used for multiple purposes. 
+
+The language has **access to the underlying memory structure** and in general
+is desinged to be easily used as a [low level programming language](https://en.wikipedia.org/wiki/Low-level_programming_language) too.
+
+Lantern is, due to the stackbased paradigm of the language it is written in 
+[reverse polish notation](https://en.wikipedia.org/wiki/Reverse_Polish_notation).
+wich sets it apart from a lot languages that work with AST or other structures.
+
+## Feature list
+
+- [x] Conditions & loops
+- [x] Heap Memory System
+- [x] Stackframe System
+- [x] Variables & Type checking
+- [x] Stack Mechanics
+- [ ] Raw Memory Access
+- [ ] Functions
+- [ ] Else-If Functionality
+- [ ] Macros
+- [ ] Access to Syscalls
+- [ ] Defining Structs (C-Style)
+- [ ] Adding Fundamental Variable Types (float, double, char...)
+- [ ] String Concatenation & Equality Operators
+
+## Building
+
+### Linux
+
+#### Requirements
+- GCC Compiler
+- Make command
+
+```console
+mkdir bin
+make
+```
+
+### Windows
+
+#### Requirements
+- GCC Compiler
+
+```console
+mkdir bin
+build.bat
+```
+
+## Example Usage
+
+```bash
+"hello, world" = sentence
+sentence println
+0 = num
+
+while num 30 < run
+  num 1 + = num
+  num println
+  
+  num 3 % 0 == if
+    "^ Divisible by 3" println
+  endi
+endw
+
+num num * = num
+"num^2 = " print
+num println
+
+"bye, world" = sentence
+sentence println
+```
+
+## Inspiration
+- [Forth](https://de.wikipedia.org/wiki/Forth_(Programmiersprache)), a stack based, imperative programming language
+- [Python](https://de.wikipedia.org/wiki/Python_(Programmiersprache)), a easy to used, interpreted programming language
+- [C](https://de.wikipedia.org/wiki/C_(Programmiersprache)), a statically typed, low level programming language
+
+
+## Contributing
+
+You can contribue to Lantern by:
+  - [Fixing bugs or contributing to features](https://github.com/cococry/Lantern/issues)
+  - [Changing features or adding new functionality](https://github.com/cococry/Lantern/pulls)
