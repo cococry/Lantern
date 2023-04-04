@@ -1,7 +1,23 @@
-0 = counter
+"hello, world" = sentence
 
-while counter 10 < run
-    counter 1 + = counter
-    counter println
+0 = num
+
+while num 30 < run
+    num 1 + = num
+    num println
+
+    num 3 % 0 == if
+        "^ Divisible by 30!" println
+    endi
 endw
+
+sentence println
+
+"num * 2 = " print
+num 2 * println
+
+12 = num
+
+"num set to: " print
+num println
 
