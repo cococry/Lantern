@@ -1,7 +1,9 @@
+# this is a comment #
+
 "hello" "hello" == if
     "hello" = hello
     ", world" = world
 
     "'hello' + ', world' = " println
-    hello world + println
+    hello world + println 
 end

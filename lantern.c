@@ -177,7 +177,15 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     uint32_t linked_stackframe_begin_token_indices[*program_size];
     uint32_t stackframe_begin_token_count = 0;
 
+    bool found_comment = false;
     while(fscanf(file, "%s", word) != EOF) {
+        if(strcmp("#", word) == 0 && !found_comment) {
+            found_comment = true;
+        } else if(strcmp("#", word) == 0 && found_comment) {
+            found_comment = false;
+            continue;
+        }
+        if(found_comment) continue;
         if((!on_literal_token && word[0] == '"') || 
             (!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1)) {
             if(!on_literal_token && word[0] == '"' && word[strlen(word) - 1] == '"' && strlen(word) > 1) {
