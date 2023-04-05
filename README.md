@@ -32,7 +32,7 @@ wich sets it apart from a lot languages that work with AST or other structures.
 - [ ] Access to Syscalls
 - [ ] Defining Structs (C-Style)
 - [ ] Adding Fundamental Variable Types (float, double, char...)
-- [ ] String Concatenation & Equality Operators
+- [x] String Concatenation & Equality Operators
 
 ## Building
 
