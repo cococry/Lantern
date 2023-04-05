@@ -25,7 +25,7 @@ typedef enum {
     INST_EQ,INST_NEQ, 
     INST_GT,INST_LT,INST_GEQ,INST_LEQ,
     INST_LOGICAL_AND, INST_LOGICAL_OR,
-    INST_IF,INST_ELSE, INST_ELIF, INST_ENDIF, INST_FI,
+    INST_IF,INST_ELSE, INST_ELIF, INST_THEN, INST_ENDIF,
     INST_WHILE, INST_RUN_WHILE, INST_END_WHILE,
     INST_PRINT, INST_PRINTLN,
     INST_JUMP,
@@ -74,7 +74,7 @@ typedef struct {
     uint32_t stackframe_index;
     uint32_t inst_ptr;
     uint32_t program_size;
-    bool found_elif_for_if_block;
+    bool found_solution_for_if_block;
 } ProgramState;
 
 bool is_str_int(const char* str) {
@@ -173,6 +173,9 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     uint32_t variable_stackframe_indices[STACKFRAME_CAP];
     uint32_t variable_count = 0;
     uint32_t virtual_stackframe_index = 0;
+    
+    uint32_t linked_stackframe_begin_token_indices[*program_size];
+    uint32_t stackframe_begin_token_count = 0;
 
     while(fscanf(file, "%s", word) != EOF) {
         if((!on_literal_token && word[0] == '"') || 
@@ -250,13 +253,33 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
             program[i] = (Token){ .inst = INST_IF };
         } else if(strcmp(word, "else") == 0) {
             program[i] = (Token){ .inst = INST_ELSE };
-        } else if(strcmp(word, "endi") == 0) {
+        } else if(strcmp(word, "end") == 0) {
+            for(int32_t j = i; j >= 0; j--) {
+                bool skipp_token = false;
+                for(uint32_t k = 0; k < stackframe_begin_token_count; k++) {
+                    if(linked_stackframe_begin_token_indices[k] == (uint32_t)j) {
+                        skipp_token = true;
+                        break;
+                    }
+                }
+                if(skipp_token) continue;
+
+                if(program[j].inst == INST_IF) {
+                    program[i] = (Token) { .inst = INST_ENDIF };
+                    linked_stackframe_begin_token_indices[stackframe_begin_token_count++] = j;
+                    break;
+                } else if(program[j].inst == INST_WHILE) {
+                    program[i] = (Token){.inst = INST_END_WHILE };
+                    linked_stackframe_begin_token_indices[stackframe_begin_token_count++] = j;
+                    program[i].val.data = j;
+                    break;
+                }
+            } 
             virtual_stackframe_index--;
-            program[i] = (Token){ .inst = INST_ENDIF };
-        } else if(strcmp(word, "elif") == 0) {
+        } else if(strcmp(word, "then") == 0) {
+            program[i] = (Token){ .inst = INST_THEN };
+        }else if(strcmp(word, "elif") == 0) {
             program[i] = (Token){ .inst = INST_ELIF };
-        }else if(strcmp(word, "fi") == 0) {
-            program[i] = (Token){ .inst = INST_FI };
         } else if(strcmp(word, "print") == 0) {
             program[i] = (Token){ .inst = INST_PRINT };
         } else if(strcmp(word, "while") == 0) {
@@ -264,9 +287,6 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
         } else if(strcmp(word, "run") == 0) {
             virtual_stackframe_index++;
             program[i] = (Token){ .inst = INST_RUN_WHILE };
-        } else if(strcmp(word, "endw") == 0) {
-            virtual_stackframe_index--;
-            program[i] = (Token){ .inst = INST_END_WHILE };
         } else if(strcmp(word, "println") == 0) {
             program[i] = (Token){ .inst = INST_PRINTLN };
         } else if(strcmp(word, "jmp") == 0) {
@@ -331,16 +351,6 @@ void heap_free(ProgramState* state, uint32_t pos) {
 }
 void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
     for(uint32_t i = 0; i < program_size; i++) {
-        if(program[i].inst == INST_END_WHILE) {
-            program[i].val.data = -1;
-            for(int32_t j = i - 1; j >= 0; j--) {
-                if(program[j].inst == INST_WHILE) {
-                    program[i].val.data = j;
-                    break;
-                }
-            }
-            PANIC_ON_ERR(program[i].val.data == (size_t)-1, ERR_SYNTAX_ERROR, "While-end token without while condition.");
-        }
         if(program[i].inst == INST_RUN_WHILE) {
             for(uint32_t j = i; j < program_size; j++) {
                 if(program[j].inst == INST_END_WHILE) {
@@ -358,19 +368,11 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 }
             }     
         }
-
-        if(program[i].inst == INST_IF || program[i].inst == INST_ELIF) {
+        if(program[i].inst == INST_IF || program[i].inst == INST_THEN) {
             program[i].val.data = -1;
-            for(uint32_t j = (program[i].inst == INST_ELIF) ? i + 1: i; j < program_size; j++) {
+            for(uint32_t j = i; j < program_size; j++) {
                 if(program[j].inst == INST_ELIF) {
-                    uint32_t elif_condition_index = j;
-                    for(int32_t k = j; k >= 0; k--) {
-                        if(program[k].inst == INST_FI) {
-                            elif_condition_index = k - 1;
-                            break;
-                        }
-                    }
-                    program[i].val.data = elif_condition_index;
+                    program[i].val.data = j - 1;
                     break;
                 }
             }
@@ -393,7 +395,7 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             PANIC_ON_ERR(program[i].val.data == (size_t)-1, ERR_SYNTAX_ERROR, "If without endif");
         }
     }
-    while(state->inst_ptr < program_size) {   
+    while(state->inst_ptr < program_size) {  
         if(program[state->inst_ptr].inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
             PANIC_ON_ERR(state->stack[state->stack_size - 1].var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE,
@@ -411,8 +413,8 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             }
         }
         if(program[state->inst_ptr].inst == INST_END_WHILE) {
-            Token tok = program[state->inst_ptr];
-            state->inst_ptr = tok.val.data;
+            uint32_t while_index = program[state->inst_ptr].val.data;
+            state->inst_ptr = while_index;
             for(int32_t i = state->stackframe_size; i >= 0; i--) {
                 if(state->stackframe[i].frame_index != state->stackframe_index) break;
                 state->stackframe[i].val.data = SIZE_MAX;
@@ -420,7 +422,7 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 state->stackframe_size--;
             }
             state->stackframe_index--;
-        }
+        } 
         if(program[state->inst_ptr].inst == INST_VAR_USAGE) {
             state->stack[state->stack_size++] = state->stackframe[program[state->inst_ptr].val.data].val;
         }
@@ -613,7 +615,7 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             state->inst_ptr = tok.val.data;
         }
 
-        if(program[state->inst_ptr].inst == INST_ENDIF) {
+        if(program[state->inst_ptr].inst == INST_ENDIF) { 
             for(int32_t i = state->stackframe_size; i >= 0; i--) {
                 if(state->stackframe[i].frame_index != state->stackframe_index) break;
                 state->stackframe[i].val.data = SIZE_MAX;
@@ -623,7 +625,7 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             state->stackframe_index--;
         }
 
-        if(program[state->inst_ptr].inst == INST_IF || program[state->inst_ptr].inst == INST_ELIF) {
+        if(program[state->inst_ptr].inst == INST_IF || program[state->inst_ptr].inst == INST_THEN) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for if check specified.");
             PANIC_ON_ERR(state->stack[state->stack_size - 1].var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE, 
                 "Invalid data type for if condition.");
@@ -632,14 +634,14 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             if(!cond) {
                 Token tok = program[state->inst_ptr];
                 if(program[state->inst_ptr].inst == INST_IF) {
-                    state->found_elif_for_if_block = false;
+                    state->found_solution_for_if_block = false;
                 }
                 state->inst_ptr = tok.val.data; 
             } else {
                 if(program[state->inst_ptr].inst == INST_IF) {
-                    state->found_elif_for_if_block = true;
+                    state->found_solution_for_if_block = true;
                 }
-                if(state->found_elif_for_if_block && program[state->inst_ptr].inst == INST_ELIF) {
+                if(state->found_solution_for_if_block && program[state->inst_ptr].inst == INST_THEN) {
                     for(uint32_t j = state->inst_ptr; j <= program_size; j++) {
                         if(program[j].inst == INST_ENDIF) {
                             state->inst_ptr = j;
@@ -649,8 +651,8 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                 }
                 else {
                     state->stackframe_index++;
-                    if(program[state->inst_ptr].inst == INST_ELIF) {
-                        state->found_elif_for_if_block = true;
+                    if(program[state->inst_ptr].inst == INST_THEN) {
+                        state->found_solution_for_if_block = true;
                     }
                 }
             }
