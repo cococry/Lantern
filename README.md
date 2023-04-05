@@ -27,7 +27,7 @@ wich sets it apart from a lot languages that work with AST or other structures.
 - [x] Stack Mechanics
 - [ ] Raw Memory Access
 - [ ] Functions
-- [ ] Else-If Functionality
+- [x] Else-If Functionality
 - [ ] Macros
 - [ ] Access to Syscalls
 - [ ] Defining Structs (C-Style)
