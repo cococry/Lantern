@@ -1,9 +1,17 @@
-# this is a comment #
+80 int alloc = ptr
 
-"hello" "hello" == if
-    "hello" = hello
-    ", world" = world
+0 = value
 
-    "'hello' + ', world' = " println
-    hello world + println 
+while value 10 < run
+    value 10 * value ptr pset
+    "Pointer at index " print
+    value print
+    ": " print
+    value ptr pget println
+    value 1 + = value
+end
+
+5 ptr pget 50 == if
+    "Pointer at 5 is indeed " print
+    5 ptr pget println
 end
