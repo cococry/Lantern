@@ -25,7 +25,7 @@ wich sets it apart from a lot languages that work with AST or other structures.
 - [x] Stackframe System
 - [x] Variables & Type checking
 - [x] Stack Mechanics
-- [ ] Raw Memory Access
+- [x] Raw Memory Access
 - [ ] Functions
 - [x] Else-If Functionality
 - [ ] Macros
