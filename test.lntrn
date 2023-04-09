@@ -1,17 +1,14 @@
-80 int alloc = ptr
+0 = counter
 
-0 = value
-
-while value 10 < run
-    value 10 * value ptr pset
-    "Pointer at index " print
-    value print
-    ": " print
-    value ptr pget println
-    value 1 + = value
+while counter 10000 < run
+    counter 3 % 0 == counter 5 % 0 == and if
+        "fizzbuzz" println
+    elif counter 3 % 0 == then
+        "fizz" println
+    elif counter 5 % 0 == then
+        "buzz" println
+    end
+    counter println
+    counter 1 + = counter
 end
 
-5 ptr pget 50 == if
-    "Pointer at 5 is indeed " print
-    5 ptr pget println
-end

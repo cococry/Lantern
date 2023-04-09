@@ -85,16 +85,21 @@ typedef struct {
     bool found_solution_for_if_block;
 } ProgramState;
 
-bool is_str_int(const char* str) {
+bool 
+is_str_int(const char* str) {
     for(uint32_t i = 0; i < strlen(str); i++) {
         if(!isdigit(str[i])) return false;
     }
     return true;
 }
-bool is_str_literal(char* str) {
+
+bool 
+is_str_literal(char* str) {
   return (str[0] == '"' && str[strlen(str) - 1] == '"' && strlen(str) > 1);
 }
-bool is_str_var_name(const char* str) {
+
+bool 
+is_str_var_name(const char* str) {
     if(is_str_int(str)) {
         return false;
     }
@@ -115,7 +120,8 @@ bool is_str_var_name(const char* str) {
     return true;
 }
 
-void strip_char_from_str(char c, char* str) {
+void 
+strip_char_from_str(char c, char* str) {
     uint32_t len = strlen(str);
     for(uint32_t i = 0; i < len; i++) {
         if(str[i] == c) {
@@ -127,13 +133,9 @@ void strip_char_from_str(char c, char* str) {
         }
     }
 }
-Token* load_program_from_file(const char* filepath, uint32_t* program_size, ProgramState* state) {
-    FILE* file;
-    file = fopen(filepath, "r");
-    if(!file) {
-        printf("Lantern: [Error]: Cannot read file '%s'.\n", filepath);
-        return NULL;
-    }
+
+uint32_t
+get_word_count_in_file(FILE* file) {
     uint32_t words_in_file = 0;
     char ch;
     bool on_word = false;
@@ -147,41 +149,97 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
             on_word = true;
         }
     }
+    return words_in_file;
+}
+
+void 
+clear_current_stackframe(ProgramState* state) {
+  for(int32_t i = state->stackframe_size; i >= 0; i--) {
+      if(state->stackframe[i].frame_index != state->stackframe_index) break;
+      state->stackframe[i].val.data = SIZE_MAX;
+      state->stackframe[i].val.heap_ptr = false; 
+      state->stackframe_size--;
+  }
+  state->stackframe_index--;
+}
+
+void 
+heap_free(ProgramState* state, uint32_t pos) {
+    free(state->heap[pos].data);
+    state->heap_size--;
+}
+
+uint32_t 
+heap_alloc(ProgramState* state, size_t size, VariableType type) {
+    state->heap[state->heap_size].data = malloc(size);
+    state->heap[state->heap_size++].var_type = type;
+    return state->heap_size - 1; 
+}
+
+RuntimeValue
+stack_top(ProgramState* state) {
+    return state->stack[state->stack_size - 1]; 
+}
+
+RuntimeValue
+stack_pop(ProgramState* state) {
+    state->stack_size--; 
+    return state->stack[state->stack_size];
+}
+
+RuntimeValue
+stack_peak(ProgramState* state, uint32_t index) {
+    return state->stack[state->stack_size - index];
+}
+
+void 
+stack_push(ProgramState* state, RuntimeValue val) {
+    state->stack_size++;
+    state->stack[state->stack_size - 1] = val;
+}
+
+Token* 
+load_program_from_file(const char* filepath, uint32_t* program_size, ProgramState* state) {
+    FILE* file;
+    file = fopen(filepath, "r");
+    if(!file) {
+        printf("Lantern: [Error]: Cannot read file '%s'.\n", filepath);
+        return NULL;
+    }
+    uint32_t words_in_file = get_word_count_in_file(file);
     rewind(file);    
 
-    const volatile uint32_t LITERAL_MAX = words_in_file;
-
-    char literals[LITERAL_MAX][MAX_WORD_SIZE];
-    bool removed_word_from_literal = false;
+    char literals[words_in_file][MAX_WORD_SIZE];
     uint32_t literal_count = 0;
-
-    char line[MAX_WORD_SIZE];
-
-    while (fgets(line, sizeof(line), file)) {
-        char literal[MAX_WORD_SIZE] = "";
-        bool on_literal = false;
-        uint32_t literal_char_count = 0;
-        for(uint32_t i = 0; i < strlen(line); i++) {
-            if(line[i] == '"' && !on_literal) {
-                on_literal = true;
-                literal[literal_char_count++] = line[i];
-                continue;
-            }
-            if(on_literal) {
-                literal[literal_char_count++] = line[i];
-                if(line[i] == ' ' && !removed_word_from_literal) {
-                    removed_word_from_literal = true;
-                    words_in_file--;
-                } else if(line[i] != ' ') 
-                    removed_word_from_literal = false;
-            }
-            if(line[i] == '"' && on_literal) {
-                on_literal = false;
-                literal[literal_char_count] = '\0';
-                literal_char_count = 0;
-                char literal_cpy[MAX_WORD_SIZE];
-                strcpy(literal_cpy, literal);
-                strcpy(literals[literal_count++], literal_cpy);
+    {
+        char line[MAX_WORD_SIZE];
+        bool removed_word_from_literal = false;
+        while (fgets(line, sizeof(line), file)) {
+            char literal[MAX_WORD_SIZE] = "";
+            bool on_literal = false;
+            uint32_t literal_char_count = 0;
+            for(uint32_t i = 0; i < strlen(line); i++) {
+                if(line[i] == '"' && !on_literal) {
+                    on_literal = true;
+                    literal[literal_char_count++] = line[i];
+                    continue;
+                }
+                if(on_literal) {
+                    literal[literal_char_count++] = line[i];
+                    if(line[i] == ' ' && !removed_word_from_literal) {
+                        removed_word_from_literal = true;
+                        words_in_file--;
+                    } else if(line[i] != ' ') 
+                        removed_word_from_literal = false;
+                }
+                if(line[i] == '"' && on_literal) {
+                    on_literal = false;
+                    literal[literal_char_count] = '\0';
+                    literal_char_count = 0;
+                    char literal_cpy[MAX_WORD_SIZE];
+                    strcpy(literal_cpy, literal);
+                    strcpy(literals[literal_count++], literal_cpy);
+                }
             }
         }
     }
@@ -189,6 +247,7 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     rewind(file);
     
     Token* program = malloc(sizeof(Token) * words_in_file);
+
     char word[MAX_WORD_SIZE];
     uint32_t i = 0;
     bool on_literal = false;
@@ -381,27 +440,8 @@ Token* load_program_from_file(const char* filepath, uint32_t* program_size, Prog
     return program;
 }
 
-void clear_current_stackframe(ProgramState* state) {
-  for(int32_t i = state->stackframe_size; i >= 0; i--) {
-      if(state->stackframe[i].frame_index != state->stackframe_index) break;
-      state->stackframe[i].val.data = SIZE_MAX;
-      state->stackframe[i].val.heap_ptr = false; 
-      state->stackframe_size--;
-  }
-  state->stackframe_index--;
-}
-
-void heap_free(ProgramState* state, uint32_t pos) {
-    free(state->heap[pos].data);
-    state->heap_size--;
-}
-uint32_t heap_alloc(ProgramState* state, size_t size, VariableType type) {
-    state->heap[state->heap_size].data = malloc(size);
-    state->heap[state->heap_size++].var_type = type;
-    return state->heap_size - 1; 
-}
-
-void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
+void
+link_stackframe_tokens(Token* program, uint32_t program_size) {
     for(uint32_t i = 0; i < program_size; i++) {
         if(program[i].inst == INST_RUN_WHILE) {
             for(uint32_t j = i; j < program_size; j++) {
@@ -442,247 +482,206 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             PANIC_ON_ERR(program[i].val.data == (size_t)-1, ERR_SYNTAX_ERROR, "If without endif");
         }
     }
-    while(state->inst_ptr < program_size) {  
-        if(program[state->inst_ptr].inst == INST_RUN_WHILE) {
+}
+void 
+exec_program(ProgramState* state, Token* program, uint32_t program_size) {
+    link_stackframe_tokens(program, program_size);
+    while(state->inst_ptr < program_size) { 
+        Token* current_token = &program[state->inst_ptr];
+        if(current_token->inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
-            PANIC_ON_ERR(state->stack[state->stack_size - 1].var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE,
+            PANIC_ON_ERR(stack_top(state).var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE,
                 "Invalid data type for while condition.");
 
-            int32_t cond = state->stack[state->stack_size - 1].data;
-            state->stack_size -= 1;
-            if(!cond) {
-                Token tok = program[state->inst_ptr];
-                state->inst_ptr = tok.val.data + 1;
-            } 
-            else state->stackframe_index++;
+            int32_t cond = stack_pop(state).data;
+            if(!cond) 
+                state->inst_ptr = current_token->val.data + 1;
+            else 
+                state->stackframe_index++;
         }
-        if(program[state->inst_ptr].inst == INST_END_WHILE) {
-            uint32_t while_index = program[state->inst_ptr].val.data;
+        if(current_token->inst == INST_END_WHILE) {
+            uint32_t while_index = current_token->val.data;
             state->inst_ptr = while_index;
             clear_current_stackframe(state);
         } 
-        if(program[state->inst_ptr].inst == INST_VAR_USAGE) {
-            state->stack[state->stack_size++] = state->stackframe[program[state->inst_ptr].val.data].val;
+        if(current_token->inst == INST_VAR_USAGE) {
+            state->stack[state->stack_size++] = state->stackframe[current_token->val.data].val;
         }
-        if(program[state->inst_ptr].inst == INST_ADD_VAR_TO_STACKFRAME) {
-            bool heap_ptr = state->stack[state->stack_size - 1].heap_ptr;
-            state->stackframe[state->stackframe_size] = (StackFrameValue){
-                .frame_index = state->stackframe_index};
-            state->stackframe[state->stack_size].val.heap_ptr = heap_ptr;
-            state->stackframe[state->stackframe_size++].val = state->stack[state->stack_size - 1];
-            state->stack_size--;
-
+        if(current_token->inst == INST_ADD_VAR_TO_STACKFRAME) {
+            state->stackframe[state->stackframe_size] = (StackFrameValue){ .frame_index = state->stackframe_index };
+            state->stackframe[state->stackframe_size++].val = stack_pop(state);
         }
-        if(program[state->inst_ptr].inst == INST_VAR_REASSIGN) {
-            state->stackframe[program[state->inst_ptr].val.data].val = state->stack[state->stack_size - 1];
-            state->stack_size--;
+        if(current_token->inst == INST_VAR_REASSIGN) {
+            state->stackframe[current_token->val.data].val = stack_pop(state);
         }
-        if (program[state->inst_ptr].inst == INST_STACK_PUSH) {
+        if (current_token->inst == INST_STACK_PUSH) {
             PANIC_ON_ERR(state->stack_size >= STACK_CAP, ERR_STACK_OVERFLOW, "Stack is overflowed");
-            state->stack[state->stack_size++] = program[state->inst_ptr].val;
+            stack_push(state, current_token->val);
         }
-        if(program[state->inst_ptr].inst == INST_PLUS || program[state->inst_ptr].inst == INST_MINUS ||
-            program[state->inst_ptr].inst == INST_DIV || program[state->inst_ptr].inst == INST_MUL || 
-            program[state->inst_ptr].inst == INST_MOD) {
+        if(current_token->inst == INST_PLUS || current_token->inst == INST_MINUS ||
+            current_token->inst == INST_DIV || current_token->inst == INST_MUL || 
+            current_token->inst == INST_MOD) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW,
                          "Too few values on stack for arithmetic operator.");
-
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT &&
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                int32_t a = state->stack[state->stack_size - 1].data;
-                int32_t b = state->stack[state->stack_size - 2].data;
-                state->stack_size -= 2;
-                if (program[state->inst_ptr].inst == INST_PLUS)
+            
+            RuntimeValue val_a = stack_peak(state, 1);
+            RuntimeValue val_b = stack_peak(state, 2);
+            if(val_a.var_type == VAR_TYPE_INT && val_b.var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                if (current_token->inst == INST_PLUS)
                     state->stack[state->stack_size].data = b + a;
-                else if (program[state->inst_ptr].inst == INST_MINUS)
+                else if (current_token->inst == INST_MINUS)
                     state->stack[state->stack_size].data = b - a;
-                else if (program[state->inst_ptr].inst == INST_MUL)
+                else if (current_token->inst == INST_MUL)
                     state->stack[state->stack_size].data = b * a;
-                else if (program[state->inst_ptr].inst == INST_DIV)
+                else if (current_token->inst == INST_DIV)
                     state->stack[state->stack_size].data = b / a;
-                else if(program[state->inst_ptr].inst == INST_MOD)
+                else if(current_token->inst == INST_MOD)
                     state->stack[state->stack_size].data = b % a;
                 state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
-            } else if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_STR && 
-                        state->stack[state->stack_size - 2].var_type == VAR_TYPE_STR) {
-                if(program[state->inst_ptr].inst == INST_PLUS) {
-                    char* a = state->heap[state->stack[state->stack_size - 1].data].data;
-                    char* b = state->heap[state->stack[state->stack_size - 2].data].data;
-                    state->stack_size -= 2;
+            } else if(val_a.var_type == VAR_TYPE_STR && val_b.var_type == VAR_TYPE_STR) {
+                if(current_token->inst == INST_PLUS) {
+                    char* a = state->heap[stack_pop(state).data].data;
+                    char* b = state->heap[stack_pop(state).data].data;
                     state->heap[state->heap_size].data = strcat(b, a);
                     state->heap[state->heap_size].var_type = VAR_TYPE_STR;
-                    state->stack[state->stack_size] = (RuntimeValue) 
-                    { .heap_ptr = true, .data = state->heap_size, .var_type = VAR_TYPE_STR };
-                    state->stack_size++;
+                    stack_push(state, (RuntimeValue) { .heap_ptr = true, .data = state->heap_size, .var_type = VAR_TYPE_STR });
                     state->heap_size++;
                 }
             }
         }
-        if(program[state->inst_ptr].inst == INST_PRINT || program[state->inst_ptr].inst == INST_PRINTLN) {
+        if(current_token->inst == INST_PRINT || current_token->inst == INST_PRINTLN) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for print function on stack.");
-            bool heap_ptr = state->stack[state->stack_size - 1].heap_ptr;
+            bool heap_ptr = stack_top(state).heap_ptr;
             if(!heap_ptr) {
-                int32_t val = state->stack[state->stack_size - 1].data;
-                state->stack_size -= 1;
-                if(program[state->inst_ptr].inst == INST_PRINTLN)
+                int32_t val = stack_pop(state).data;
+                if(current_token->inst == INST_PRINTLN)
                     printf("%i\n", val);
                 else
                     printf("%i", val);
             } else { 
-                if(state->heap[state->stack[state->stack_size - 1].data].var_type == VAR_TYPE_STR) {
-                    char* val = state->heap[state->stack[state->stack_size - 1].data].data;
-                    state->stack_size -= 1;
-                    if(program[state->inst_ptr].inst == INST_PRINTLN)
+                if(state->heap[stack_top(state).data].var_type == VAR_TYPE_STR) {
+                    char* val = state->heap[stack_pop(state).data].data;
+                    if(current_token->inst == INST_PRINTLN)
                         printf("%s\n", val);
                     else
                         printf("%s", val);
                 }
             }
         }
-        if(program[state->inst_ptr].inst == INST_JUMP) {
-            int32_t index = state->stack[state->stack_size - 1].data;
+        if(current_token->inst == INST_JUMP) {
+            int32_t index = stack_pop(state).data;
             PANIC_ON_ERR(index >= (int32_t)program_size || 
                          index < 0, ERR_INVALID_JUMP, "Invalid index for jump specified.");
-            state->inst_ptr = index - 1;
-            state->inst_ptr++;
-            state->stack_size--;
+            state->inst_ptr = index;
             continue;
         }
-        if(program[state->inst_ptr].inst == INST_STACK_PREV) {
+        if(current_token->inst == INST_STACK_PREV) {
             state->stack_size--;
-            int32_t index = (state->stack_size - 1) - program[state->inst_ptr].val.data;
+            int32_t index = (state->stack_size - 1) - current_token->val.data;
             PANIC_ON_ERR(index >= (int32_t)state->stack_size || 
                          index < 0, ERR_INVALID_STACK_ACCESS, "Invalid index for retrieving value from stack");
-            state->stack[state->stack_size++] = state->stack[index];
+            stack_push(state, state->stack[index]);
         }
-        if(program[state->inst_ptr].inst == INST_EQ) {
+        if(current_token->inst == INST_EQ) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
-
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                int32_t a = state->stack[state->stack_size - 1].data;
-                int32_t b = state->stack[state->stack_size - 2].data;
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(a == b);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
-            } else if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_STR &&
-                state->stack[state->stack_size -2].var_type == VAR_TYPE_STR) {
-                char* a = state->heap[state->stack[state->stack_size - 1].data].data;
-                char* b = state->heap[state->stack[state->stack_size - 2].data].data;
-                state->stack_size -= 2;
-                state->stack[state->stack_size] = (RuntimeValue) 
-                { .heap_ptr = false, .data = strcmp(a, b) == 0, .var_type = VAR_TYPE_INT };
-                state->stack_size++;
+            
+            RuntimeValue val_a = stack_peak(state, 1);
+            RuntimeValue val_b = stack_peak(state, 2);
+            if(val_a.var_type == VAR_TYPE_INT && val_b.var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(a == b), .var_type = VAR_TYPE_INT });
+            } else if(val_a.var_type == VAR_TYPE_STR && val_b.var_type == VAR_TYPE_STR) {
+                char* a = state->heap[stack_pop(state).data].data;
+                char* b = state->heap[stack_pop(state).data].data;
+                stack_push(state, (RuntimeValue){ .data = strcmp(a, b) == 0, .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_NEQ) {
+        if(current_token->inst == INST_NEQ) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for equality check specified.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(a != b);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
-            } else if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_STR &&
-                state->stack[state->stack_size -2].var_type == VAR_TYPE_STR) {
-                char* a = state->heap[state->stack[state->stack_size - 1].data].data;
-                char* b = state->heap[state->stack[state->stack_size - 2].data].data;
-                state->stack_size -= 2;
-                state->stack[state->stack_size] = (RuntimeValue) 
-                { .heap_ptr = false, .data = strcmp(a, b) != 0, .var_type = VAR_TYPE_INT };
-                state->stack_size++;
+            RuntimeValue val_a = stack_peak(state, 1);
+            RuntimeValue val_b = stack_peak(state, 2);
+            if(val_a.var_type == VAR_TYPE_INT && val_b.var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(a != b), .var_type = VAR_TYPE_INT });
+            } else if(val_a.var_type == VAR_TYPE_STR && val_b.var_type == VAR_TYPE_STR) {
+                char* a = state->heap[stack_pop(state).data].data;
+                char* b = state->heap[stack_pop(state).data].data;
+                stack_push(state, (RuntimeValue){ .data = strcmp(a, b) != 0, .var_type = VAR_TYPE_INT });
             }
-
         }
-        if(program[state->inst_ptr].inst == INST_GT) {
+        if(current_token->inst == INST_GT) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than check specified.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(b > a);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b > a), .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_LT) {
+        if(current_token->inst == INST_LT) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than check specified.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            state->stack_size -= 2;
-            state->stack[state->stack_size++].data = (int32_t)(b < a);
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b < a), .var_type = VAR_TYPE_INT });
+            }
         }
-        if(program[state->inst_ptr].inst == INST_GEQ) {
+        if(current_token->inst == INST_GEQ) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for greather-than-equal check specified.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(b >= a);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b >= a), .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_LEQ) {
+        if(current_token->inst == INST_LEQ) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Too few values for less-than-equal check specified.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(b <= a);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b <= a), .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_LOGICAL_OR) {
+        if(current_token->inst == INST_LOGICAL_OR) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_OVERFLOW, "Too few values for logical or operation.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(b || a);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b || a), .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_LOGICAL_AND) {
+        if(current_token->inst == INST_LOGICAL_AND) {
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_OVERFLOW, "Too few values for logical or operation.");
-            int32_t a = state->stack[state->stack_size - 1].data;
-            int32_t b = state->stack[state->stack_size - 2].data;
-            if(state->stack[state->stack_size - 1].var_type == VAR_TYPE_INT && 
-                state->stack[state->stack_size - 2].var_type == VAR_TYPE_INT) {
-                state->stack_size -= 2;
-                state->stack[state->stack_size].data = (int32_t)(b && a);
-                state->stack[state->stack_size++].var_type = VAR_TYPE_INT;
+            if(stack_peak(state, 1).var_type == VAR_TYPE_INT && stack_peak(state, 2).var_type == VAR_TYPE_INT) {
+                int32_t a = stack_pop(state).data;
+                int32_t b = stack_pop(state).data;
+                stack_push(state, (RuntimeValue){ .data = (int32_t)(b && a), .var_type = VAR_TYPE_INT });
             }
         }
-        if(program[state->inst_ptr].inst == INST_ELSE) {
-            Token tok = program[state->inst_ptr];
-            state->inst_ptr = tok.val.data;
+        if(current_token->inst == INST_ELSE) {
+            state->inst_ptr = current_token->val.data;
         }
 
-        if(program[state->inst_ptr].inst == INST_ENDIF) {
+        if(current_token->inst == INST_ENDIF) {
             clear_current_stackframe(state);
         }
 
-        if(program[state->inst_ptr].inst == INST_IF || program[state->inst_ptr].inst == INST_THEN) {
+        if(current_token->inst == INST_IF || current_token->inst == INST_THEN) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for if check specified.");
-            PANIC_ON_ERR(state->stack[state->stack_size - 1].var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE, 
+            PANIC_ON_ERR(stack_top(state).var_type != VAR_TYPE_INT, ERR_INVALID_DATA_TYPE, 
                 "Invalid data type for if condition.");
-            int32_t cond = state->stack[state->stack_size - 1].data;
-            state->stack_size--;
+            int32_t cond = stack_pop(state).data;
             if(!cond) {
-                Token tok = program[state->inst_ptr];
-                if(program[state->inst_ptr].inst == INST_IF) {
+                if(current_token->inst == INST_IF)
                     state->found_solution_for_if_block = false;
-                }
-                state->inst_ptr = tok.val.data; 
+                state->inst_ptr = current_token->val.data; 
             } else {
-                if(program[state->inst_ptr].inst == INST_IF) {
+                if(current_token->inst == INST_IF) 
                     state->found_solution_for_if_block = true;
-                }
-                if(state->found_solution_for_if_block && program[state->inst_ptr].inst == INST_THEN) {
+                if(state->found_solution_for_if_block && current_token->inst == INST_THEN) {
                     for(uint32_t j = state->inst_ptr; j <= program_size; j++) {
                         if(program[j].inst != INST_ENDIF) continue;
                         state->inst_ptr = j;
@@ -690,13 +689,13 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                     }
                 } else {
                     state->stackframe_index++;
-                    if(program[state->inst_ptr].inst == INST_THEN) {
+                    if(current_token->inst == INST_THEN) {
                         state->found_solution_for_if_block = true;
                     }
                 }
             }
         }
-        if(program[state->inst_ptr].inst == INST_HEAP_ALLOC) {
+        if(current_token->inst == INST_HEAP_ALLOC) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for size of memory allocation specified.");
             PANIC_ON_ERR(program[state->inst_ptr - 1].inst != INST_STR_TYPE &&
                 program[state->inst_ptr - 1].inst != INST_INT_TYPE, ERR_INVALID_DATA_TYPE, "Invalid data type for allocating block");
@@ -707,23 +706,20 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             else if(program[state->inst_ptr - 1].inst == INST_STR_TYPE)
                 type = VAR_TYPE_STR;
 
-            uint32_t heap_ptr = heap_alloc(state, state->stack[state->stack_size - 1].data, type);
-            
-            state->stack_size--;
-            state->stack[state->stack_size++] = (RuntimeValue){ .data = heap_ptr, .heap_ptr = true, .var_type = VAR_TYPE_INT };
+            uint32_t heap_ptr = heap_alloc(state, stack_pop(state).data, type); 
+            stack_push(state, (RuntimeValue){ .data = heap_ptr, .heap_ptr = true, .var_type = VAR_TYPE_INT });
         }
-        if(program[state->inst_ptr].inst == INST_HEAP_FREE) {
+        if(current_token->inst == INST_HEAP_FREE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No pointer for free operation specified.");
-            PANIC_ON_ERR(!state->stack[state->stack_size - 1].heap_ptr, ERR_INVALID_PTR, "Trying to free stack based value.");
-            PANIC_ON_ERR(state->stack[state->stack_size - 1].data > state->heap_size, ERR_INVALID_PTR, 
+            PANIC_ON_ERR(!stack_top(state).heap_ptr, ERR_INVALID_PTR, "Trying to free stack based value.");
+            PANIC_ON_ERR(stack_top(state).data > state->heap_size, ERR_INVALID_PTR, 
                 "Invalid pointer for free.");
             
-            heap_free(state, state->stack[state->stack_size - 1].data);
-            state->stack_size--;
+            heap_free(state, stack_pop(state).data);
         }
-        if(program[state->inst_ptr].inst == INST_PTR_GET_I) {
-            RuntimeValue data_index = state->stack[state->stack_size - 2];
-            RuntimeValue heap_index = state->stack[state->stack_size - 1];
+        if(current_token->inst == INST_PTR_GET_I) {
+            RuntimeValue heap_index = stack_pop(state);
+            RuntimeValue data_index = stack_pop(state);
             PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Not enough values for pget specified.");
             PANIC_ON_ERR(!heap_index.heap_ptr, ERR_INVALID_PTR, "Trying to pget with stack based value.");
             PANIC_ON_ERR(heap_index.data > state->heap_size, ERR_INVALID_PTR, 
@@ -731,34 +727,33 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
 
             switch (state->heap[heap_index.data].var_type) {
                 case VAR_TYPE_INT: {
-                    state->stack_size -= 2;
                     size_t* heap_data = (size_t*)state->heap[heap_index.data].data;
-                    state->stack[state->stack_size++] = (RuntimeValue) { 
+                    stack_push(state, (RuntimeValue) { 
                         .data = heap_data[data_index.data], 
                         .var_type = state->heap[heap_index.data].var_type, 
-                        .heap_ptr = false };
+                        .heap_ptr = false });
                     break;
                 }
                 case VAR_TYPE_STR: {
-                    state->stack_size -= 2;
                     char** heap_data = (char**)state->heap[heap_index.data].data;
                     char* data_at_index = heap_data[data_index.data];
-                    state->heap[state->heap_size].data = data_at_index;
-                    state->heap[state->heap_size++].var_type = VAR_TYPE_STR;
-                    state->stack[state->stack_size++] = (RuntimeValue) {
+                    state->heap[state->heap_size++] = (HeapValue){ .data = data_at_index, .var_type = VAR_TYPE_STR };
+                    stack_push(state, (RuntimeValue) {
                         .data =  state->heap_size - 1,
                         .heap_ptr = true,
                         .var_type = VAR_TYPE_STR
-                    };
+                    });
                     break;
                 }
             }
         } 
-        if(program[state->inst_ptr].inst == INST_PTR_SET_I) {
-            RuntimeValue val = state->stack[state->stack_size - 3];
-            RuntimeValue data_index = state->stack[state->stack_size - 2];
-            RuntimeValue heap_index = state->stack[state->stack_size - 1];
+        if(current_token->inst == INST_PTR_SET_I) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "Not enough values for pset specified.");
+
+            RuntimeValue heap_index = stack_pop(state);
+            RuntimeValue data_index = stack_pop(state);
+            RuntimeValue val = stack_pop(state);
+
             PANIC_ON_ERR(!heap_index.heap_ptr, ERR_INVALID_PTR, "Trying to pset with stack based value.");
             PANIC_ON_ERR(heap_index.data > state->heap_size, ERR_INVALID_PTR, 
                 "Invalid pointer for pset.");
@@ -767,13 +762,11 @@ void exec_program(ProgramState* state, Token* program, uint32_t program_size) {
 
             switch (state->heap[heap_index.data].var_type) {
                 case VAR_TYPE_INT: {
-                    state->stack_size -= 3;
                     size_t* heap_data = (size_t*)state->heap[heap_index.data].data;
                     heap_data[data_index.data] = val.data;
                     break;
                 }
                 case VAR_TYPE_STR: {       
-                    state->stack_size -= 3;
                     char** heap_data = (char**)state->heap[heap_index.data].data;
                     heap_data[data_index.data] = state->heap[val.data].data;
                     break;
