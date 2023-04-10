@@ -3,8 +3,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
-#include <sys/types.h>
 
 #define STACK_CAP 64
 #define STACKFRAME_CAP 256
@@ -29,10 +27,9 @@ typedef enum {
     INST_WHILE, INST_RUN_WHILE, INST_END_WHILE,
     INST_PRINT, INST_PRINTLN,
     INST_JUMP,
-    INST_ADD_VAR_TO_STACKFRAME, INST_VAR_ASSIGN, INST_VAR_USAGE,
+    INST_ADD_VAR_TO_STACKFRAME, INST_VAR_ASSIGN, INST_VAR_USAGE, INST_VAR_REASSIGN,
     INST_HEAP_ALLOC, INST_HEAP_FREE, INST_PTR_GET_I, INST_PTR_SET_I,
     INST_INT_TYPE, INST_STR_TYPE,
-    INST_VAR_REASSIGN
 } Instruction;
 
 typedef enum {
@@ -390,7 +387,9 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
             program[i] = (Token){ .inst = INST_INT_TYPE };
         } else if(strcmp(word, "str") == 0) {
             program[i] = (Token){ .inst = INST_STR_TYPE };
-        } else {
+        } else if(strcmp(word, "function") == 0) {
+            program[i] = (Token){ .inst = INST_FUNC_DEF, .val.data = i };
+        }else {
             if(is_str_var_name(word)) {
                 if(program[i - 1].inst == INST_VAR_ASSIGN) {
                     PANIC_ON_ERR(i < 2, ERR_SYNTAX_ERROR, "Assigning variable to nothing."); 

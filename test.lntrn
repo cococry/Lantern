@@ -1,14 +1,1 @@
-0 = counter
-
-while counter 10000 < run
-    counter 3 % 0 == counter 5 % 0 == and if
-        "fizzbuzz" println
-    elif counter 3 % 0 == then
-        "fizz" println
-    elif counter 5 % 0 == then
-        "buzz" println
-    end
-    counter println
-    counter 1 + = counter
-end
-
+12 println
