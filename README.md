@@ -28,7 +28,7 @@ wich sets it apart from a lot languages that work with AST or other structures.
 - [x] Raw Memory Access
 - [ ] Functions
 - [x] Else-If Functionality
-- [ ] Macros
+- [x] Macros
 - [ ] Access to Syscalls
 - [ ] Defining Structs (C-Style)
 - [ ] Adding Fundamental Variable Types (float, double, char...)
