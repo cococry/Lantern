@@ -1,1 +1,7 @@
+<<<<<<< HEAD
 12 println
+=======
+macro int_size def 8 end
+
+$int_size 10 * println
+>>>>>>> 65b7c22 (Macros)

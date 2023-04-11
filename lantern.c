@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include <sys/types.h>
 
 #define STACK_CAP 64
 #define STACKFRAME_CAP 256
@@ -27,9 +29,10 @@ typedef enum {
     INST_WHILE, INST_RUN_WHILE, INST_END_WHILE,
     INST_PRINT, INST_PRINTLN,
     INST_JUMP,
-    INST_ADD_VAR_TO_STACKFRAME, INST_VAR_ASSIGN, INST_VAR_USAGE, INST_VAR_REASSIGN,
+    INST_ADD_VAR_TO_STACKFRAME, INST_ASSIGN, INST_VAR_USAGE, INST_VAR_REASSIGN,
     INST_HEAP_ALLOC, INST_HEAP_FREE, INST_PTR_GET_I, INST_PTR_SET_I,
     INST_INT_TYPE, INST_STR_TYPE,
+    INST_MACRO, INST_MACRO_DEF, INST_END_MACRO, INST_MACRO_USAGE
 } Instruction;
 
 typedef enum {
@@ -72,13 +75,22 @@ typedef struct {
 typedef struct {
     RuntimeValue stack[STACK_CAP];
     int32_t stack_size;
+
     HeapValue* heap;
     uint32_t heap_size;
+
     StackFrameValue stackframe[STACKFRAME_CAP];
     uint32_t stackframe_size;
     uint32_t stackframe_index;
+
     uint32_t inst_ptr;
     uint32_t program_size;
+
+    uint32_t call_positions[STACK_CAP];
+    uint32_t call_positions_count;
+
+    uint32_t macro_positions[PROGRAM_CAP];
+    uint32_t macro_count;
     bool found_solution_for_if_block;
 } ProgramState;
 
@@ -96,6 +108,11 @@ is_str_literal(char* str) {
 }
 
 bool 
+is_str_macro_usage(char* str) {
+    return str[0] == '$';
+}
+
+bool
 is_str_var_name(const char* str) {
     if(is_str_int(str)) {
         return false;
@@ -255,12 +272,15 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
     uint32_t variable_count = 0;
     uint32_t virtual_stackframe_index = 0;
     
-    uint32_t linked_stackframe_begin_token_indices[*program_size];
-    uint32_t stackframe_begin_token_count = 0;
+    uint32_t crossreferenced_tokens[*program_size];
+    uint32_t crossreferenced_token_count = 0;
 
     bool on_comment = false;
 
+    char macro_names[MAX_WORD_SIZE][PROGRAM_CAP];
+    uint32_t macro_names_count = 0;
     while(fscanf(file, "%s", word) != EOF) {
+        //printf("%s\n", word);
         if(strcmp("#", word) == 0 && !on_comment) {
             on_comment = true;
         } else if(strcmp("#>", word) == 0 && on_comment) {
@@ -303,10 +323,29 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
             i++;
             continue;
         }
+        if(is_str_macro_usage(word)) {
+            memmove(word, word+1, strlen(word));
+            for(uint32_t j = 0; j < macro_names_count; j++) {
+                if(strcmp(macro_names[j], word) == 0) {
+                    program[i] = (Token){ .inst = INST_MACRO_USAGE, .val.data = state->macro_positions[j] };
+                    break;
+                }
+            }
+            i++;
+            continue;
+        }
+        
+        if(i > 0) {
+            if(program[i - 1].inst == INST_MACRO) {
+                strcpy(macro_names[macro_names_count++], word);
+                i++;
+                continue;
+            }
+        }
         if(strcmp(word, "prev") == 0) {
             program[i] = (Token){ .inst = INST_STACK_PREV };
         } else if(strcmp(word, "=") == 0) {
-            program[i] = (Token){ .inst = INST_VAR_ASSIGN };
+            program[i] = (Token){ .inst = INST_ASSIGN };
         } else if(strcmp(word, "+") == 0) {
             program[i] = (Token){ .inst = INST_PLUS };
         } else if(strcmp(word, "-") == 0) {
@@ -341,8 +380,8 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
         } else if(strcmp(word, "end") == 0) {
             for(int32_t j = i; j >= 0; j--) {
                 bool skip_token = false;
-                for(uint32_t k = 0; k < stackframe_begin_token_count; k++) {
-                    if(linked_stackframe_begin_token_indices[k] != (uint32_t)j) continue;
+                for(uint32_t k = 0; k < crossreferenced_token_count; k++) {
+                    if(crossreferenced_tokens[k] != (uint32_t)j) continue;
                     skip_token = true;
                     break;
                 }
@@ -350,12 +389,16 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
 
                 if(program[j].inst == INST_IF) {
                     program[i] = (Token) { .inst = INST_ENDIF };
-                    linked_stackframe_begin_token_indices[stackframe_begin_token_count++] = j;
+                    crossreferenced_tokens[crossreferenced_token_count++] = j;
                     break;
                 } else if(program[j].inst == INST_WHILE) {
-                    program[i] = (Token){.inst = INST_END_WHILE };
-                    linked_stackframe_begin_token_indices[stackframe_begin_token_count++] = j;
+                    program[i] = (Token){ .inst = INST_END_WHILE };
                     program[i].val.data = j;
+                    crossreferenced_tokens[crossreferenced_token_count++] = j;
+                    break;
+                } else if(program[j].inst == INST_MACRO) {
+                    program[i] = (Token){ .inst = INST_END_MACRO };
+                    crossreferenced_tokens[crossreferenced_token_count++] = j;
                     break;
                 }
             } 
@@ -387,11 +430,14 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
             program[i] = (Token){ .inst = INST_INT_TYPE };
         } else if(strcmp(word, "str") == 0) {
             program[i] = (Token){ .inst = INST_STR_TYPE };
-        } else if(strcmp(word, "function") == 0) {
-            program[i] = (Token){ .inst = INST_FUNC_DEF, .val.data = i };
-        }else {
+        } else if(strcmp(word, "macro") == 0) {
+            program[i] = (Token){ .inst = INST_MACRO };
+        } else if(strcmp(word, "def") == 0) {
+            program[i] = (Token){ .inst = INST_MACRO_DEF };
+            state->macro_positions[state->macro_count++] = i;
+        } else {
             if(is_str_var_name(word)) {
-                if(program[i - 1].inst == INST_VAR_ASSIGN) {
+                if(program[i - 1].inst == INST_ASSIGN) {
                     PANIC_ON_ERR(i < 2, ERR_SYNTAX_ERROR, "Assigning variable to nothing."); 
                     bool re_assigning = false;
                     for(uint32_t j = 0; j < variable_count; j++) {
@@ -440,7 +486,7 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
 }
 
 void
-link_stackframe_tokens(Token* program, uint32_t program_size) {
+crossreference_tokens(Token* program, uint32_t program_size) {
     for(uint32_t i = 0; i < program_size; i++) {
         if(program[i].inst == INST_RUN_WHILE) {
             for(uint32_t j = i; j < program_size; j++) {
@@ -480,12 +526,19 @@ link_stackframe_tokens(Token* program, uint32_t program_size) {
             }
             PANIC_ON_ERR(program[i].val.data == (size_t)-1, ERR_SYNTAX_ERROR, "If without endif");
         }
+        if(program[i].inst == INST_MACRO) {
+            for(uint32_t j = i; j < program_size; j++) {
+                if(program[j].inst != INST_END_MACRO) continue;
+                program[i].val.data = j;
+                break;
+            }
+        }
     }
 }
 void 
 exec_program(ProgramState* state, Token* program, uint32_t program_size) {
-    link_stackframe_tokens(program, program_size);
-    while(state->inst_ptr < program_size) { 
+    crossreference_tokens(program, program_size);
+    while(state->inst_ptr < program_size) {
         Token* current_token = &program[state->inst_ptr];
         if(current_token->inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
@@ -717,9 +770,9 @@ exec_program(ProgramState* state, Token* program, uint32_t program_size) {
             heap_free(state, stack_pop(state).data);
         }
         if(current_token->inst == INST_PTR_GET_I) {
+            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Not enough values for pget specified.");
             RuntimeValue heap_index = stack_pop(state);
             RuntimeValue data_index = stack_pop(state);
-            PANIC_ON_ERR(state->stack_size < 2, ERR_STACK_UNDERFLOW, "Not enough values for pget specified.");
             PANIC_ON_ERR(!heap_index.heap_ptr, ERR_INVALID_PTR, "Trying to pget with stack based value.");
             PANIC_ON_ERR(heap_index.data > state->heap_size, ERR_INVALID_PTR, 
                 "Invalid pointer for pget.");
@@ -771,6 +824,17 @@ exec_program(ProgramState* state, Token* program, uint32_t program_size) {
                     break;
                 }
             }
+        }
+        if(current_token->inst == INST_MACRO_USAGE) {
+            state->call_positions[state->call_positions_count++] = state->inst_ptr;
+            state->inst_ptr = current_token->val.data;
+        }
+        if(current_token->inst == INST_END_MACRO) {
+            state->inst_ptr = state->call_positions[state->call_positions_count - 1];
+            state->call_positions_count--;
+        }
+        if(current_token->inst == INST_MACRO) {
+            state->inst_ptr = current_token->val.data;
         }
         state->inst_ptr++;
     }
