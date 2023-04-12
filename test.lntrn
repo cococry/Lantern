@@ -1,7 +1,52 @@
-<<<<<<< HEAD
-12 println
-=======
 macro int_size def 8 end
+macro val_count def 10 end
 
-$int_size 10 * println
->>>>>>> 65b7c22 (Macros)
+$int_size $val_count * int alloc = ptr
+
+3  0 ptr pset
+9  1 ptr pset
+2  2 ptr pset
+8  3 ptr pset
+6  4 ptr pset
+45 5 ptr pset
+5  6 ptr pset
+32 7 ptr pset
+16 8 ptr pset
+11 9 ptr pset
+
+"VALUES BEFORE" println
+
+0 = counter
+while counter 10 < run
+    "Value: " print
+    counter ptr pget println
+    counter 1 + = counter
+end
+0 = i
+while i $val_count < run
+    0 = j
+    0 = tmp
+    i 1 + = j
+    while j $val_count < run
+        i ptr pget j ptr pget > if
+            i ptr pget = tmp
+            j ptr pget i ptr pset
+            tmp j ptr pset
+        end
+        j 1 + = j
+    end
+    i 1 + = i
+end
+
+
+"VALUES AFTER" println
+
+0 = index
+while index 10 < run
+    "Value: " print
+    index ptr pget println
+    index 1 + = index
+end
+
+
+ptr free

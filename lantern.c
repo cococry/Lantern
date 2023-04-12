@@ -134,6 +134,14 @@ is_str_var_name(const char* str) {
     return true;
 }
 
+bool
+int_array_contains(int32_t* arr, uint32_t arr_size, int32_t val) {
+    for(uint32_t i = 0; i < arr_size; i++) {
+        if(arr[i] == val) return true;
+    }
+    return false;
+}
+
 void 
 strip_char_from_str(char c, char* str) {
     uint32_t len = strlen(str);
@@ -389,11 +397,13 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
 
                 if(program[j].inst == INST_IF) {
                     program[i] = (Token) { .inst = INST_ENDIF };
+                    virtual_stackframe_index--;
                     crossreferenced_tokens[crossreferenced_token_count++] = j;
                     break;
                 } else if(program[j].inst == INST_WHILE) {
                     program[i] = (Token){ .inst = INST_END_WHILE };
                     program[i].val.data = j;
+                    virtual_stackframe_index--;
                     crossreferenced_tokens[crossreferenced_token_count++] = j;
                     break;
                 } else if(program[j].inst == INST_MACRO) {
@@ -402,7 +412,6 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
                     break;
                 }
             } 
-            virtual_stackframe_index--;
         } else if(strcmp(word, "then") == 0) {
             program[i] = (Token){ .inst = INST_THEN };
         }else if(strcmp(word, "elif") == 0) {
@@ -487,14 +496,27 @@ load_program_from_file(const char* filepath, uint32_t* program_size, ProgramStat
 
 void
 crossreference_tokens(Token* program, uint32_t program_size) {
+    uint32_t crossreferenced_whiles[program_size];
+    uint32_t crossreferenced_whiles_count = 0;
     for(uint32_t i = 0; i < program_size; i++) {
         if(program[i].inst == INST_RUN_WHILE) {
-            for(uint32_t j = i; j < program_size; j++) {
-                if(program[j].inst != INST_END_WHILE) continue;
-                program[i].val.data = j;
-                break;
+            if(int_array_contains((int32_t*)crossreferenced_whiles, crossreferenced_whiles_count, i))
+                continue;
+            uint32_t while_index = 0;
+            uint32_t end_while_index = 0;
+            while_index++;
+            for(uint32_t j = i + 1; j < program_size; j++) {
+                if(program[j].inst == INST_END_WHILE && (while_index - 1) == end_while_index) {
+                    program[i].val.data = j;
+                    crossreferenced_whiles[crossreferenced_whiles_count++] = j;
+                    break;
+                } else if(program[j].inst == INST_END_WHILE && (while_index - 1) != end_while_index) {
+                    end_while_index++;
+                }
+                if(program[j].inst == INST_RUN_WHILE) {
+                    while_index++;
+                }
             }
-            PANIC_ON_ERR(program[i].val.data == (size_t)-1, ERR_SYNTAX_ERROR, "While condtion without end token.");
         }
         if(program[i].inst == INST_ELSE) {
             for(uint32_t j = i; j < program_size; j++) {
@@ -539,6 +561,7 @@ void
 exec_program(ProgramState* state, Token* program, uint32_t program_size) {
     crossreference_tokens(program, program_size);
     while(state->inst_ptr < program_size) {
+        //printf("instruction: %i\n", state->inst_ptr);
         Token* current_token = &program[state->inst_ptr];
         if(current_token->inst == INST_RUN_WHILE) {
             PANIC_ON_ERR(state->stack_size < 1, ERR_STACK_UNDERFLOW, "No value for while condition specified.");
@@ -547,7 +570,7 @@ exec_program(ProgramState* state, Token* program, uint32_t program_size) {
 
             int32_t cond = stack_pop(state).data;
             if(!cond) 
-                state->inst_ptr = current_token->val.data + 1;
+                state->inst_ptr = current_token->val.data;
             else 
                 state->stackframe_index++;
         }
